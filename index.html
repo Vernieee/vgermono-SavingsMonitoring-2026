@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ipon · Personal Savings Tracker</title>
+<meta name="description" content="Track deposits, withdrawals, and goals across every bank and e-wallet you save in.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- Boot loader (shown while checking auth session)               -->
+<!-- ============================================================ -->
+<div id="boot-loader" class="boot-loader"><div class="spinner" style="border-color: rgba(30,122,95,0.2); border-top-color: var(--primary);"></div></div>
+
+<!-- ============================================================ -->
+<!-- Auth screen                                                    -->
+<!-- ============================================================ -->
+<div id="auth-screen" class="auth-screen" style="display:none;">
+  <div class="auth-card">
+    <div class="brand">
+      <div class="brand__mark">I</div>
+      <div class="brand__text"><h1>Ipon</h1><span>Personal savings tracker</span></div>
+    </div>
+    <h2 id="auth-title">Welcome back</h2>
+    <p class="lead" id="auth-lead">Log in to see how your savings are growing.</p>
+    <div id="auth-msg" class="auth-msg"></div>
+    <form id="auth-form" class="auth-form">
+      <div class="field">
+        <label for="auth-email">Email</label>
+        <input class="input" type="email" id="auth-email" required autocomplete="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="auth-password">Password</label>
+        <input class="input" type="password" id="auth-password" required autocomplete="current-password" minlength="6" placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="auth-submit">
+        <span id="auth-submit-label">Log in</span>
+      </button>
+    </form>
+    <div class="auth-switch">
+      <span id="auth-switch-text">New to Ipon?</span>
+      <button type="button" id="auth-switch-btn">Create an account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- App shell                                                      -->
+<!-- ============================================================ -->
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand__mark">I</div>
+      <div class="brand__text"><h1>Ipon</h1><span>Personal savings tracker</span></div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav__item is-active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
+        Dashboard
+      </button>
+      <button class="nav__item" data-view="platforms">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+        Platforms
+      </button>
+      <button class="nav__item" data-view="transactions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        Transactions
+      </button>
+      <button class="nav__item" data-view="goals">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+        Goals
+      </button>
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="avatar" id="sidebar-avatar">?</div>
+      <div class="sidebar__email" id="sidebar-email">—</div>
+      <button class="icon-btn" id="logout-btn" title="Log out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ===================== Dashboard ===================== -->
+    <section class="view is-active" id="view-dashboard">
+      <div class="page-head">
+        <div><h2>Dashboard</h2><p>A snapshot of everywhere you keep your savings.</p></div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">Total savings</span>
+            <div class="stat-card__icon tone-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
+          <div class="stat-card__value num" id="stat-total">₱0.00</div>
+          <div class="stat-card__sub" id="stat-total-sub">Across all platforms</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">Platforms</span>
+            <div class="stat-card__icon tone-ink">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+            </div>
+          </div>
+          <div class="stat-card__value num" id="stat-platforms">0</div>
+          <div class="stat-card__sub">Banks &amp; e-wallets tracked</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">This month</span>
+            <div class="stat-card__icon tone-accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+          </div>
+          <div class="stat-card__value num" id="stat-month">₱0.00</div>
+          <div class="stat-card__sub" id="stat-month-sub">Net saved this month</div>
+        </div>
+
+        <div class="stat-card goal-ring-card">
+          <svg class="goal-ring" width="56" height="56" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="24" fill="none" stroke="var(--surface-sunk)" stroke-width="6"/>
+            <circle id="goal-ring-progress" cx="28" cy="28" r="24" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="150.8" transform="rotate(-90 28 28)"/>
+          </svg>
+          <div>
+            <span class="stat-card__label">Goal progress</span>
+            <div class="goal-ring__pct" id="stat-goal-pct">—</div>
+            <div class="stat-card__sub" id="stat-goal-sub">No goal set yet</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-grid">
+        <div class="panel">
+          <div class="panel__head">
+            <div><h3>Savings growth</h3><p>Cumulative balance over the last 6 months</p></div>
+          </div>
+          <div class="chart-wrap" id="growth-chart-wrap" data-empty="Add a transaction to see your growth trend">
+            <canvas id="growth-chart"></canvas>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel__head">
+            <div><h3>Distribution</h3><p>Where your savings currently sit</p></div>
+          </div>
+          <div class="chart-wrap" id="dist-chart-wrap" data-empty="Add a platform to see the breakdown" style="height:150px;">
+            <canvas id="dist-chart"></canvas>
+          </div>
+          <div class="legend" id="dist-legend"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <div><h3>Recent transactions</h3><p>Your last 6 deposits and withdrawals</p></div>
+          <button class="btn btn-soft btn-sm" data-nav="transactions">View all</button>
+        </div>
+        <div class="tx-list" id="recent-tx-list"></div>
+      </div>
+    </section>
+
+    <!-- ===================== Platforms ===================== -->
+    <section class="view" id="view-platforms">
+      <div class="page-head">
+        <div><h2>Platforms</h2><p>Every bank and e-wallet you keep savings in.</p></div>
+        <button class="btn btn-primary" id="add-platform-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add platform
+        </button>
+      </div>
+      <div class="platform-grid" id="platform-grid"></div>
+    </section>
+
+    <!-- ===================== Transactions ===================== -->
+    <section class="view" id="view-transactions">
+      <div class="page-head">
+        <div><h2>Transactions</h2><p>Every deposit and withdrawal you've logged.</p></div>
+        <button class="btn btn-primary" id="add-tx-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add transaction
+        </button>
+      </div>
+      <div class="toolbar">
+        <select class="select" id="tx-filter-platform"><option value="">All platforms</option></select>
+        <select class="select" id="tx-filter-type">
+          <option value="">All types</option>
+          <option value="deposit">Deposits</option>
+          <option value="withdrawal">Withdrawals</option>
+        </select>
+      </div>
+      <div class="table-card">
+        <table class="tx-table">
+          <thead>
+            <tr><th>Platform</th><th>Type</th><th>Note</th><th>Date</th><th style="text-align:right">Amount</th><th></th></tr>
+          </thead>
+          <tbody id="tx-table-body"></tbody>
+        </table>
+        <div class="empty-state" id="tx-empty" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          <p>No transactions yet. Add your first deposit to get started.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Goals ===================== -->
+    <section class="view" id="view-goals">
+      <div class="page-head">
+        <div><h2>Savings goals</h2><p>Set a target and watch your progress.</p></div>
+        <button class="btn btn-primary" id="add-goal-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add goal
+        </button>
+      </div>
+      <div class="goal-grid" id="goal-grid"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Mobile bottom nav -->
+<nav class="mobile-nav" id="mobile-nav">
+  <button data-view="dashboard" class="is-active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
+    Home
+  </button>
+  <button data-view="platforms">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+    Platforms
+  </button>
+  <button data-view="transactions">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+    History
+  </button>
+  <button data-view="goals">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+    Goals
+  </button>
+</nav>
+
+<!-- ============================================================ -->
+<!-- Modal: Add/Edit Platform                                       -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-platform">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="platform-modal-title">Add platform</h3>
+      <button class="modal__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <form class="modal__body" id="platform-form">
+      <input type="hidden" id="platform-id">
+      <div class="field">
+        <label>Logo</label>
+        <div class="logo-upload">
+          <div class="logo-upload__preview" id="platform-logo-preview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div class="logo-upload__actions">
+            <input type="file" id="platform-logo-input" accept="image/*" hidden>
+            <button type="button" class="btn btn-ghost btn-sm" id="platform-logo-choose">Upload</button>
+            <button type="button" class="btn btn-danger btn-sm" id="platform-logo-remove" style="display:none;">Remove</button>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="platform-name">Name</label>
+        <input class="input" id="platform-name" placeholder="e.g. Maya, GCash, BPI" required>
+      </div>
+      <div class="field">
+        <label for="platform-type">Type</label>
+        <select class="select" id="platform-type">
+          <option>E-Wallet</option>
+          <option>Bank</option>
+          <option>Digital Bank</option>
+          <option>Cash</option>
+          <option>Investment</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <p class="field-error" id="platform-error"></p>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="platform-submit">Save platform</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Add/Edit Transaction                                    -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-tx">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="tx-modal-title">Add transaction</h3>
+      <button class="modal__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <form class="modal__body" id="tx-form">
+      <input type="hidden" id="tx-id">
+      <div class="segmented" id="tx-type-toggle">
+        <button type="button" class="is-active deposit" data-type="deposit">Deposit</button>
+        <button type="button" data-type="withdrawal">Withdrawal</button>
+      </div>
+      <div class="field">
+        <label for="tx-platform">Platform</label>
+        <select class="select" id="tx-platform" required></select>
+      </div>
+      <div class="field">
+        <label for="tx-amount">Amount (₱)</label>
+        <input class="input" id="tx-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+      </div>
+      <div class="field">
+        <label for="tx-date">Date</label>
+        <input class="input" id="tx-date" type="date" required>
+      </div>
+      <div class="field">
+        <label for="tx-note">Note (optional)</label>
+        <input class="input" id="tx-note" placeholder="e.g. Monthly savings">
+      </div>
+      <p class="field-error" id="tx-error"></p>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="tx-submit">Save transaction</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Add/Edit Goal                                           -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-goal">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="goal-modal-title">Add goal</h3>
+      <button class="modal__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <form class="modal__body" id="goal-form">
+      <input type="hidden" id="goal-id">
+      <div class="field">
+        <label for="goal-name">Goal name</label>
+        <input class="input" id="goal-name" placeholder="e.g. Emergency fund" required>
+      </div>
+      <div class="field">
+        <label for="goal-amount">Target amount (₱)</label>
+        <input class="input" id="goal-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+      </div>
+      <div class="field">
+        <label for="goal-date">Target date (optional)</label>
+        <input class="input" id="goal-date" type="date">
+      </div>
+      <p class="field-error" id="goal-error"></p>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="goal-submit">Save goal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Confirm delete                                          -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal__head">
+      <h3 id="confirm-title">Delete this?</h3>
+      <button class="modal__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal__body">
+      <p id="confirm-message" style="color:var(--ink-soft); font-size:14px;">This action can't be undone.</p>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-ok">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-stack"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
