@@ -237,7 +237,7 @@ a { color: inherit; }
    ========================================================= */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 22px;
 }
@@ -263,11 +263,6 @@ a { color: inherit; }
 .tone-primary { background: var(--primary-soft); color: var(--primary-dark); }
 .tone-accent  { background: var(--accent-soft); color: var(--accent); }
 .tone-ink     { background: var(--surface-sunk); color: var(--ink-soft); }
-
-/* Goal progress ring card */
-.goal-ring-card { display: flex; align-items: center; gap: 16px; }
-.goal-ring { flex-shrink: 0; }
-.goal-ring__pct { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
 
 /* =========================================================
    Panels / charts
@@ -380,7 +375,7 @@ a { color: inherit; }
 .add-tile span { font-size: 13.5px; font-weight: 600; }
 
 /* =========================================================
-   Transactions table / goals list
+   Transactions table
    ========================================================= */
 .toolbar { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; align-items: center; }
 .select, .input {
@@ -409,21 +404,6 @@ a { color: inherit; }
 .badge-deposit { background: var(--primary-soft); color: var(--primary-dark); }
 .badge-withdrawal { background: var(--danger-soft); color: var(--danger); }
 .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
-
-.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
-.goal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow-sm); }
-.goal-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
-.goal-card__name { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
-.goal-card__date { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
-.goal-card__amounts { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.goal-card__saved { font-size: 19px; font-weight: 700; }
-.goal-card__target { font-size: 13px; color: var(--ink-faint); }
-.goal-card__bar { height: 8px; border-radius: var(--radius-full); background: var(--surface-sunk); overflow: hidden; margin-bottom: 10px; }
-.goal-card__bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--primary)); transition: width 0.5s ease; }
-.goal-card__foot { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 16px; }
-.goal-card__foot b { color: var(--ink); }
-.goal-card__actions { display: flex; gap: 8px; }
-.goal-card__actions .btn { flex: 1; }
 
 /* =========================================================
    Modals
@@ -602,7 +582,6 @@ a { color: inherit; }
 
 @media (max-width: 460px) {
   .stat-grid { grid-template-columns: 1fr 1fr; }
-  .goal-ring-card { flex-direction: row; }
 }
 
 /* ─── FOOTER ─── */

@@ -32,20 +32,9 @@ create table if not exists public.transactions (
   created_at   timestamptz not null default now()
 );
 
--- Savings goals
-create table if not exists public.goals (
-  id             uuid primary key default uuid_generate_v4(),
-  user_id        uuid not null references auth.users(id) on delete cascade,
-  name           text not null,
-  target_amount  numeric(12,2) not null check (target_amount > 0),
-  target_date    date,
-  created_at     timestamptz not null default now()
-);
-
 create index if not exists idx_platforms_user       on public.platforms(user_id);
 create index if not exists idx_transactions_user     on public.transactions(user_id);
 create index if not exists idx_transactions_platform on public.transactions(platform_id);
-create index if not exists idx_goals_user            on public.goals(user_id);
 
 -- ---------------------------------------------------------
 -- Convenience view: live balance per platform
@@ -72,7 +61,6 @@ group by p.id;
 -- ---------------------------------------------------------
 alter table public.platforms    enable row level security;
 alter table public.transactions enable row level security;
-alter table public.goals        enable row level security;
 
 create policy "platforms_select_own" on public.platforms
   for select using (auth.uid() = user_id);
@@ -90,15 +78,6 @@ create policy "transactions_insert_own" on public.transactions
 create policy "transactions_update_own" on public.transactions
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "transactions_delete_own" on public.transactions
-  for delete using (auth.uid() = user_id);
-
-create policy "goals_select_own" on public.goals
-  for select using (auth.uid() = user_id);
-create policy "goals_insert_own" on public.goals
-  for insert with check (auth.uid() = user_id);
-create policy "goals_update_own" on public.goals
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "goals_delete_own" on public.goals
   for delete using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------

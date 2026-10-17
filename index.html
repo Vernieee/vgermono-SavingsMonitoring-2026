@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>IPON · Personal Savings Tracker</title>
-<meta name="description" content="Track deposits, withdrawals, and goals across every bank and e-wallet you save in.">
+<meta name="description" content="Track deposits, withdrawals, and savings across every bank and e-wallet you use.">
 <script>
   try {
     const savedTheme = localStorage.getItem('ipon-theme');
@@ -88,10 +88,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         Transactions
       </button>
-      <button class="nav__item" data-view="goals">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
-        Goals
-      </button>
     </nav>
 
     <div class="sidebar__footer">
@@ -163,17 +159,6 @@
           <div class="stat-card__sub" id="stat-month-sub">Net saved this month</div>
         </div>
 
-        <div class="stat-card goal-ring-card">
-          <svg class="goal-ring" width="56" height="56" viewBox="0 0 56 56">
-            <circle cx="28" cy="28" r="24" fill="none" stroke="var(--surface-sunk)" stroke-width="6"/>
-            <circle id="goal-ring-progress" cx="28" cy="28" r="24" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="150.8" transform="rotate(-90 28 28)"/>
-          </svg>
-          <div>
-            <span class="stat-card__label">Goal progress</span>
-            <div class="goal-ring__pct" id="stat-goal-pct">—</div>
-            <div class="stat-card__sub" id="stat-goal-sub">No goal set yet</div>
-          </div>
-        </div>
       </div>
 
       <div class="panel-grid">
@@ -248,17 +233,6 @@
       </div>
     </section>
 
-    <!-- ===================== Goals ===================== -->
-    <section class="view" id="view-goals">
-      <div class="page-head">
-        <div><h2>Savings goals</h2><p>Set a target and watch your progress.</p></div>
-        <button class="btn btn-primary" id="add-goal-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-          Add goal
-        </button>
-      </div>
-      <div class="goal-grid" id="goal-grid"></div>
-    </section>
   </main>
 
   <!-- Mobile bottom nav -->
@@ -274,10 +248,6 @@
     <button data-view="transactions">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
       History
-    </button>
-    <button data-view="goals">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
-      Goals
     </button>
   </nav>
 </div>
@@ -365,38 +335,6 @@
       <div class="modal__footer">
         <button type="button" class="btn btn-ghost" data-close>Cancel</button>
         <button type="submit" class="btn btn-primary" id="tx-submit">Save transaction</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- ============================================================ -->
-<!-- Modal: Add/Edit Goal                                           -->
-<!-- ============================================================ -->
-<div class="modal-overlay" id="modal-goal">
-  <div class="modal">
-    <div class="modal__head">
-      <h3 id="goal-modal-title">Add goal</h3>
-      <button class="modal__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-    </div>
-    <form class="modal__body" id="goal-form">
-      <input type="hidden" id="goal-id">
-      <div class="field">
-        <label for="goal-name">Goal name</label>
-        <input class="input" id="goal-name" placeholder="e.g. Emergency fund" required>
-      </div>
-      <div class="field">
-        <label for="goal-amount">Target amount (₱)</label>
-        <input class="input" id="goal-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
-      </div>
-      <div class="field">
-        <label for="goal-date">Target date (optional)</label>
-        <input class="input" id="goal-date" type="date">
-      </div>
-      <p class="field-error" id="goal-error"></p>
-      <div class="modal__footer">
-        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
-        <button type="submit" class="btn btn-primary" id="goal-submit">Save goal</button>
       </div>
     </form>
   </div>

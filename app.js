@@ -19,7 +19,6 @@ const state = {
   user: null,
   platforms: [],      // [{ id, name, type, logo_url, balance }]
   transactions: [],   // [{ id, platform_id, type, amount, date, note }]
-  goals: [],          // [{ id, name, target_amount, target_date }]
   pendingLogoFile: null,
   pendingLogoRemoved: false,
 };
@@ -198,11 +197,10 @@ $('#confirm-ok').addEventListener('click', async () => {
    7. DATA LOADING
    --------------------------------------------------------- */
 async function loadAllData() {
-  await Promise.all([loadPlatforms(), loadTransactions(), loadGoals()]);
+  await Promise.all([loadPlatforms(), loadTransactions()]);
   renderDashboard();
   renderPlatforms();
   renderTransactions();
-  renderGoals();
 }
 
 async function loadPlatforms() {
@@ -215,12 +213,6 @@ async function loadTransactions() {
   const { data, error } = await sb.from('transactions').select('*').order('date', { ascending: false }).order('created_at', { ascending: false });
   if (error) { toast('Could not load transactions', 'error'); console.error(error); return; }
   state.transactions = data;
-}
-
-async function loadGoals() {
-  const { data, error } = await sb.from('goals').select('*').order('target_date', { ascending: true, nullsFirst: false });
-  if (error) { toast('Could not load goals', 'error'); console.error(error); return; }
-  state.goals = data;
 }
 
 /* ---------------------------------------------------------
@@ -275,22 +267,6 @@ function renderDashboard() {
   $('#stat-month').textContent = peso(monthNet);
   $('#stat-month-sub').textContent = `${monthTx.length} transaction${monthTx.length === 1 ? '' : 's'} this month`;
   $('#stat-month-sub').className = 'stat-card__sub ' + (monthNet > 0 ? 'is-up' : monthNet < 0 ? 'is-down' : '');
-
-  // Goal progress (primary goal = soonest target date, else most recently created)
-  const goal = state.goals[0];
-  const ring = $('#goal-ring-progress');
-  const circumference = 2 * Math.PI * 24;
-  if (goal) {
-    const pct = Math.min(100, (total / Number(goal.target_amount)) * 100);
-    ring.style.strokeDasharray = `${circumference}`;
-    ring.style.strokeDashoffset = `${circumference - (pct / 100) * circumference}`;
-    $('#stat-goal-pct').textContent = `${pct.toFixed(0)}%`;
-    $('#stat-goal-sub').textContent = goal.name;
-  } else {
-    ring.style.strokeDashoffset = `${circumference}`;
-    $('#stat-goal-pct').textContent = '—';
-    $('#stat-goal-sub').textContent = 'No goal set yet';
-  }
 
   renderDistributionChart(total);
   renderGrowthChart();
@@ -624,9 +600,11 @@ async function deletePlatform(id) {
    10. TRANSACTIONS
    --------------------------------------------------------- */
 function populatePlatformSelects() {
+  const selectedFilterPlatform = $('#tx-filter-platform').value;
   const opts = state.platforms.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   $('#tx-platform').innerHTML = opts || '<option value="">No platforms yet</option>';
   $('#tx-filter-platform').innerHTML = '<option value="">All platforms</option>' + opts;
+  $('#tx-filter-platform').value = selectedFilterPlatform;
 }
 
 function renderTransactions() {
@@ -750,110 +728,7 @@ async function deleteTransaction(id) {
 }
 
 /* ---------------------------------------------------------
-   11. GOALS
-   --------------------------------------------------------- */
-function renderGoals() {
-  const grid = $('#goal-grid');
-  const total = state.platforms.reduce((sum, p) => sum + p.balance, 0);
-
-  if (!state.goals.length) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column:1/-1;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
-        <p>No goals yet. Set a target to start tracking progress.</p>
-      </div>`;
-    return;
-  }
-
-  grid.innerHTML = state.goals.map(g => {
-    const pct = Math.min(100, (total / Number(g.target_amount)) * 100);
-    const remaining = Math.max(Number(g.target_amount) - total, 0);
-    return `
-      <div class="goal-card" data-id="${g.id}">
-        <div class="goal-card__head">
-          <div>
-            <div class="goal-card__name">${escapeHtml(g.name)}</div>
-            ${g.target_date ? `<div class="goal-card__date">Target: ${formatDate(g.target_date)}</div>` : ''}
-          </div>
-        </div>
-        <div class="goal-card__amounts">
-          <span class="goal-card__saved num">${peso(total)}</span>
-          <span class="goal-card__target num">of ${peso(g.target_amount)}</span>
-        </div>
-        <div class="goal-card__bar"><span style="width:${pct}%"></span></div>
-        <div class="goal-card__foot">
-          <span><b class="num">${pct.toFixed(1)}%</b> reached</span>
-          <span><b class="num">${peso(remaining)}</b> to go</span>
-        </div>
-        <div class="goal-card__actions">
-          <button class="btn btn-ghost btn-sm" data-action="edit-goal" data-id="${g.id}">Edit</button>
-          <button class="btn btn-danger btn-sm" data-action="delete-goal" data-id="${g.id}">Delete</button>
-        </div>
-      </div>`;
-  }).join('');
-
-  $$('[data-action="edit-goal"]', grid).forEach(b => b.addEventListener('click', () => openGoalModal(state.goals.find(g => g.id === b.dataset.id))));
-  $$('[data-action="delete-goal"]', grid).forEach(b => b.addEventListener('click', () => {
-    askConfirm('Delete goal?', 'This cannot be undone.', () => deleteGoal(b.dataset.id));
-  }));
-}
-
-$('#add-goal-btn').addEventListener('click', () => openGoalModal());
-
-function openGoalModal(goal = null) {
-  $('#goal-error').textContent = '';
-  $('#goal-modal-title').textContent = goal ? 'Edit goal' : 'Add goal';
-  $('#goal-id').value = goal?.id || '';
-  $('#goal-name').value = goal?.name || '';
-  $('#goal-amount').value = goal?.target_amount || '';
-  $('#goal-date').value = goal?.target_date || '';
-  openModal('modal-goal');
-}
-
-$('#goal-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const id = $('#goal-id').value;
-  const payload = {
-    name: $('#goal-name').value.trim(),
-    target_amount: parseFloat($('#goal-amount').value),
-    target_date: $('#goal-date').value || null,
-  };
-  const errorEl = $('#goal-error');
-  if (!payload.name || !payload.target_amount || payload.target_amount <= 0) {
-    errorEl.textContent = 'Please enter a name and a target amount greater than 0.';
-    return;
-  }
-
-  const submitBtn = $('#goal-submit');
-  submitBtn.disabled = true;
-  try {
-    if (id) {
-      const { error } = await sb.from('goals').update(payload).eq('id', id);
-      if (error) throw error;
-      toast('Goal updated', 'success');
-    } else {
-      const { error } = await sb.from('goals').insert({ ...payload, user_id: state.user.id });
-      if (error) throw error;
-      toast('Goal added', 'success');
-    }
-    closeModal('modal-goal');
-    await loadAllData();
-  } catch (err) {
-    errorEl.textContent = err.message || 'Could not save goal.';
-  } finally {
-    submitBtn.disabled = false;
-  }
-});
-
-async function deleteGoal(id) {
-  const { error } = await sb.from('goals').delete().eq('id', id);
-  if (error) { toast('Could not delete goal', 'error'); return; }
-  toast('Goal deleted', 'success');
-  await loadAllData();
-}
-
-/* ---------------------------------------------------------
-   12. INIT
+   11. INIT
    --------------------------------------------------------- */
 setupThemeToggle();
 
