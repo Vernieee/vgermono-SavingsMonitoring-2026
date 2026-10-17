@@ -801,6 +801,11 @@ async function deleteGoal(id) {
    12. INIT
    --------------------------------------------------------- */
 (async function init() {
+  const footerName = $('#f-name');
+  const footerYear = $('#f-year');
+  if (footerName) footerName.textContent = 'Ipon';
+  if (footerYear) footerYear.textContent = new Date().getFullYear();
+
   const { data: { session } } = await sb.auth.getSession();
   if (session?.user) {
     state.user = session.user;

@@ -558,3 +558,23 @@ a { color: inherit; }
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .goal-ring-card { flex-direction: row; }
 }
+
+/* ─── FOOTER ─── */
+footer {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 1.5rem 1rem 2rem;
+  border-top: 1px solid var(--border);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+footer p {
+  margin: 0;
+}
+
+footer span {
+  color: var(--primary);
+  font-weight: 600;
+}
