@@ -24,7 +24,7 @@ const state = {
   pendingLogoRemoved: false,
 };
 
-const PLATFORM_COLORS = ['#1E7A5F', '#D98E3F', '#4C7CE0', '#C1483A', '#8A5CD9', '#2FA6A6', '#C77DBD', '#9AA23B'];
+const PLATFORM_COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#2563eb', '#1d4ed8', '#38bdf8', '#818cf8', '#0ea5e9'];
 
 /* ---------------------------------------------------------
    3. HELPERS
@@ -228,6 +228,37 @@ async function loadGoals() {
    --------------------------------------------------------- */
 let growthChart, distChart;
 
+function setTheme(theme, persist = false) {
+  document.documentElement.dataset.theme = theme;
+  const nextTheme = theme === 'dark' ? 'light' : 'dark';
+  $$('.theme-toggle').forEach(button => {
+    const label = `Switch to ${nextTheme} mode`;
+    button.setAttribute('aria-label', label);
+    button.title = label;
+  });
+
+  if (persist) {
+    try {
+      localStorage.setItem('ipon-theme', theme);
+    } catch (error) {
+      console.warn('Could not save the theme preference.', error);
+    }
+  }
+
+  if ($('#app').classList.contains('is-ready')) renderDashboard();
+}
+
+function setupThemeToggle() {
+  const currentTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  setTheme(currentTheme);
+  $$('.theme-toggle').forEach(button => {
+    button.addEventListener('click', () => {
+      const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      setTheme(nextTheme, true);
+    });
+  });
+}
+
 function renderDashboard() {
   const total = state.platforms.reduce((sum, p) => sum + p.balance, 0);
   $('#stat-total').textContent = peso(total);
@@ -284,12 +315,22 @@ function renderDistributionChart(total) {
   const colors = sorted.map((_, i) => PLATFORM_COLORS[i % PLATFORM_COLORS.length]);
 
   if (distChart) distChart.destroy();
+  const chartText = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+  const tooltipBackground = getComputedStyle(document.documentElement).getPropertyValue('--surface-sunk').trim();
   distChart = new Chart($('#dist-chart').getContext('2d'), {
     type: 'doughnut',
     data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }] },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '68%',
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${peso(ctx.raw)}` } } }
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBackground,
+          titleColor: chartText,
+          bodyColor: chartText,
+          callbacks: { label: (ctx) => `${ctx.label}: ${peso(ctx.raw)}` }
+        }
+      }
     }
   });
 
@@ -335,27 +376,41 @@ function renderGrowthChart() {
   });
 
   if (growthChart) growthChart.destroy();
+  const styles = getComputedStyle(document.documentElement);
+  const primary = styles.getPropertyValue('--primary').trim();
+  const chartFill = styles.getPropertyValue('--chart-fill').trim();
+  const chartGrid = styles.getPropertyValue('--chart-grid').trim();
+  const chartText = styles.getPropertyValue('--ink-soft').trim();
+  const tooltipBackground = styles.getPropertyValue('--surface-sunk').trim();
   growthChart = new Chart($('#growth-chart').getContext('2d'), {
     type: 'line',
     data: {
       labels: months.map(m => m.label),
       datasets: [{
         data: values,
-        borderColor: '#1E7A5F',
-        backgroundColor: 'rgba(30,122,95,0.08)',
+        borderColor: primary,
+        backgroundColor: chartFill,
         borderWidth: 2.5,
         pointRadius: 3,
-        pointBackgroundColor: '#1E7A5F',
+        pointBackgroundColor: primary,
         fill: true,
         tension: 0.35,
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => peso(ctx.raw) } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBackground,
+          titleColor: chartText,
+          bodyColor: chartText,
+          callbacks: { label: (ctx) => peso(ctx.raw) }
+        }
+      },
       scales: {
-        y: { ticks: { callback: (v) => '₱' + Number(v).toLocaleString('en-PH') }, grid: { color: '#EEF1EC' } },
-        x: { grid: { display: false } }
+        y: { ticks: { color: chartText, callback: (v) => '₱' + Number(v).toLocaleString('en-PH') }, grid: { color: chartGrid } },
+        x: { ticks: { color: chartText }, grid: { display: false } }
       }
     }
   });
@@ -800,6 +855,8 @@ async function deleteGoal(id) {
 /* ---------------------------------------------------------
    12. INIT
    --------------------------------------------------------- */
+setupThemeToggle();
+
 (async function init() {
   const footerName = $('#f-name');
   const footerYear = $('#f-year');

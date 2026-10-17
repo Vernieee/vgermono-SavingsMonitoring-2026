@@ -3,25 +3,6 @@
    Design tokens
    ========================================================= */
 :root {
-  /* Color */
-  --bg:            #F5F6F2;
-  --surface:       #FFFFFF;
-  --surface-sunk:  #EEF1EC;
-  --ink:           #13221D;
-  --ink-soft:      #5C6B64;
-  --ink-faint:     #93A199;
-  --border:        #E3E7DF;
-  --primary:       #1E7A5F;
-  --primary-dark:  #14533F;
-  --primary-soft:  #E1F1E8;
-  --accent:        #D98E3F;
-  --accent-soft:   #FBEEDC;
-  --danger:        #C1483A;
-  --danger-soft:   #F8E7E4;
-  --shadow-sm:     0 1px 2px rgba(18, 33, 27, 0.06);
-  --shadow-md:     0 8px 24px -8px rgba(18, 33, 27, 0.16);
-  --shadow-lg:     0 20px 48px -16px rgba(18, 33, 27, 0.24);
-
   /* Type */
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -32,6 +13,68 @@
   --radius-md: 16px;
   --radius-lg: 22px;
   --radius-full: 999px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #060c18;
+  --surface: #0b1526;
+  --surface-sunk: #0f1e38;
+  --ink: #e8edf5;
+  --ink-soft: #7a93bb;
+  --ink-faint: #7a93bb;
+  --border: rgba(56, 120, 220, 0.18);
+  --primary: #3b82f6;
+  --primary-dark: #93c5fd;
+  --primary-hover: #2563eb;
+  --primary-soft: rgba(59, 130, 246, 0.12);
+  --brand-end: #1d4ed8;
+  --accent: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.12);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 48px -16px rgba(0, 0, 0, 0.6);
+  --header-bg: rgba(6, 12, 24, 0.92);
+  --overlay: rgba(0, 0, 0, 0.64);
+  --toast-bg: #0f1e38;
+  --spinner-track: rgba(232, 237, 245, 0.2);
+  --button-soft-hover: rgba(59, 130, 246, 0.2);
+  --button-danger-hover: rgba(248, 113, 113, 0.22);
+  --chart-grid: rgba(56, 120, 220, 0.18);
+  --chart-fill: rgba(59, 130, 246, 0.18);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f0f5ff;
+  --surface: #ffffff;
+  --surface-sunk: #e4ecfa;
+  --ink: #0f1e38;
+  --ink-soft: #3d5a80;
+  --ink-faint: #6886a8;
+  --border: rgba(59, 130, 246, 0.2);
+  --primary: #1d6ef5;
+  --primary-dark: #1d4ed8;
+  --primary-hover: #1d4ed8;
+  --primary-soft: rgba(59, 130, 246, 0.08);
+  --brand-end: #1d4ed8;
+  --accent: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.08);
+  --danger: #c2414b;
+  --danger-soft: #fde8e8;
+  --shadow-sm: 0 1px 2px rgba(15, 30, 56, 0.06);
+  --shadow-md: 0 8px 24px -8px rgba(59, 130, 246, 0.12);
+  --shadow-lg: 0 20px 48px -16px rgba(59, 130, 246, 0.18);
+  --header-bg: rgba(240, 245, 255, 0.92);
+  --overlay: rgba(15, 30, 56, 0.42);
+  --toast-bg: #0f1e38;
+  --spinner-track: rgba(29, 110, 245, 0.18);
+  --button-soft-hover: rgba(59, 130, 246, 0.16);
+  --button-danger-hover: #f3d5d0;
+  --chart-grid: rgba(59, 130, 246, 0.16);
+  --chart-fill: rgba(59, 130, 246, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -94,7 +137,7 @@ a { color: inherit; }
 .brand__mark {
   width: 36px; height: 36px;
   border-radius: 11px;
-  background: linear-gradient(155deg, var(--primary), var(--primary-dark));
+  background: linear-gradient(155deg, var(--primary), var(--brand-end));
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-family: var(--font-display); font-size: 19px; font-weight: 600;
   box-shadow: var(--shadow-sm);
@@ -103,6 +146,9 @@ a { color: inherit; }
 .brand__text span { font-size: 12px; color: var(--ink-faint); }
 
 .mobile-header { display: none; }
+.theme-toggle svg { width: 16px; height: 16px; }
+:root[data-theme="dark"] .theme-icon--moon,
+:root[data-theme="light"] .theme-icon--sun { display: none; }
 
 .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav__item {
@@ -175,13 +221,13 @@ a { color: inherit; }
 .btn svg { width: 16px; height: 16px; }
 .btn:active { transform: scale(0.97); }
 .btn-primary { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
-.btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:hover { background: var(--primary-hover); }
 .btn-soft { background: var(--primary-soft); color: var(--primary-dark); }
-.btn-soft:hover { background: #d3ecdf; }
+.btn-soft:hover { background: var(--button-soft-hover); }
 .btn-ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--surface-sunk); color: var(--ink); }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
-.btn-danger:hover { background: #f3d5d0; }
+.btn-danger:hover { background: var(--button-danger-hover); }
 .btn-sm { padding: 7px 13px; font-size: 13px; }
 .btn-block { width: 100%; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -383,7 +429,7 @@ a { color: inherit; }
    Modals
    ========================================================= */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(19, 34, 29, 0.42);
+  position: fixed; inset: 0; background: var(--overlay);
   display: none; align-items: center; justify-content: center; padding: 20px;
   z-index: 100; backdrop-filter: blur(2px);
 }
@@ -472,7 +518,7 @@ a { color: inherit; }
   display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
 }
 .toast {
-  background: var(--ink); color: #fff; padding: 11px 16px; border-radius: var(--radius-sm);
+  background: var(--toast-bg); color: #fff; padding: 11px 16px; border-radius: var(--radius-sm);
   font-size: 13.5px; box-shadow: var(--shadow-md); animation: toastIn 0.2s ease;
   display: flex; align-items: center; gap: 8px;
 }
@@ -483,7 +529,7 @@ a { color: inherit; }
 /* Loading skeleton */
 .spinner {
   width: 18px; height: 18px; border-radius: 50%;
-  border: 2.5px solid rgba(255,255,255,0.35); border-top-color: #fff;
+  border: 2.5px solid var(--spinner-track); border-top-color: var(--primary);
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -511,7 +557,7 @@ a { color: inherit; }
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; position: sticky; top: 0; z-index: 50;
     width: 100%; flex-shrink: 0;
-    background: rgba(245, 246, 242, 0.96); backdrop-filter: blur(8px);
+    background: var(--header-bg); backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border); padding: 14px 16px 12px;
   }
   .brand--mobile {
