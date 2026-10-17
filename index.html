@@ -76,21 +76,13 @@
     </div>
 
     <nav class="nav">
-      <button class="nav__item is-active" data-view="dashboard">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
-        Dashboard
-      </button>
-      <button class="nav__item" data-view="platforms">
+      <button class="nav__item is-active" data-view="platforms">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
         Platforms
       </button>
       <button class="nav__item" data-view="goals">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
         Goals
-      </button>
-      <button class="nav__item" data-view="transactions">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-        Transactions
       </button>
     </nav>
 
@@ -123,13 +115,16 @@
 
   <main class="main">
 
-    <!-- ===================== Dashboard ===================== -->
-    <section class="view is-active" id="view-dashboard">
+    <!-- ===================== Platforms ===================== -->
+    <section class="view is-active" id="view-platforms">
       <div class="page-head">
-        <div><h2>Dashboard</h2><p>A snapshot of everywhere you keep your savings.</p></div>
+        <div><h2>Platforms</h2><p>Every bank and e-wallet you keep savings in.</p></div>
+        <button class="btn btn-primary" id="add-platform-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add platform
+        </button>
       </div>
-
-      <div class="stat-grid">
+      <div class="stat-grid stat-grid--2">
         <div class="stat-card">
           <div class="stat-card__top">
             <span class="stat-card__label">Total savings</span>
@@ -152,16 +147,6 @@
           <div class="stat-card__sub">Banks &amp; e-wallets tracked</div>
         </div>
 
-        <div class="stat-card">
-          <div class="stat-card__top">
-            <span class="stat-card__label">This month</span>
-            <div class="stat-card__icon tone-accent">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-            </div>
-          </div>
-          <div class="stat-card__value num" id="stat-month">₱0.00</div>
-          <div class="stat-card__sub" id="stat-month-sub">Net saved this month</div>
-        </div>
 
       </div>
 
@@ -185,25 +170,9 @@
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel__head">
-          <div><h3>Recent transactions</h3><p>Your last 6 deposits and withdrawals</p></div>
-          <button class="btn btn-soft btn-sm" data-nav="transactions">View all</button>
-        </div>
-        <div class="tx-list" id="recent-tx-list"></div>
-      </div>
-    </section>
-
-    <!-- ===================== Platforms ===================== -->
-    <section class="view" id="view-platforms">
-      <div class="page-head">
-        <div><h2>Platforms</h2><p>Every bank and e-wallet you keep savings in.</p></div>
-        <button class="btn btn-primary" id="add-platform-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-          Add platform
-        </button>
-      </div>
+      <h3 class="section-title">Your platforms</h3>
       <div class="platform-grid" id="platform-grid"></div>
+
     </section>
 
     <!-- ===================== Goals ===================== -->
@@ -257,6 +226,26 @@
         </div>
       </div>
 
+      <div class="panel-grid" id="goal-charts" hidden>
+        <div class="panel">
+          <div class="panel__head">
+            <div><h3>Goal progress</h3><p>Saved vs target for each goal</p></div>
+          </div>
+          <div class="chart-wrap" id="goal-bar-wrap" data-empty="Add money to a goal to see its progress">
+            <canvas id="goal-bar-chart"></canvas>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel__head">
+            <div><h3>Savings by goal</h3><p>Where your goal savings are going</p></div>
+          </div>
+          <div class="chart-wrap" id="goal-dist-wrap" data-empty="Add money to a goal to see the breakdown" style="height:150px;">
+            <canvas id="goal-dist-chart"></canvas>
+          </div>
+          <div class="legend" id="goal-dist-legend"></div>
+        </div>
+      </div>
+
       <div class="goal-notice" id="goal-setup-note" hidden>
         Goals need two new database tables. Run <strong>supabase-goals.sql</strong> in your Supabase SQL editor, then refresh this page.
       </div>
@@ -275,56 +264,17 @@
       </div>
     </section>
 
-    <!-- ===================== Transactions ===================== -->
-    <section class="view" id="view-transactions">
-      <div class="page-head">
-        <div><h2>Transactions</h2><p>Every deposit and withdrawal you've logged.</p></div>
-        <button class="btn btn-primary" id="add-tx-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-          Add transaction
-        </button>
-      </div>
-      <div class="toolbar">
-        <select class="select" id="tx-filter-platform"><option value="">All platforms</option></select>
-        <select class="select" id="tx-filter-type">
-          <option value="">All types</option>
-          <option value="deposit">Deposits</option>
-          <option value="withdrawal">Withdrawals</option>
-        </select>
-      </div>
-      <div class="table-card">
-        <table class="tx-table">
-          <thead>
-            <tr><th>Platform</th><th>Type</th><th>Note</th><th>Date</th><th style="text-align:right">Amount</th><th></th></tr>
-          </thead>
-          <tbody id="tx-table-body"></tbody>
-        </table>
-        <div class="empty-state" id="tx-empty" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-          <p>No transactions yet. Add your first deposit to get started.</p>
-        </div>
-      </div>
-    </section>
-
   </main>
 
   <!-- Mobile bottom nav -->
   <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
-    <button data-view="dashboard" class="is-active">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
-      Home
-    </button>
-    <button data-view="platforms">
+    <button data-view="platforms" class="is-active">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
       Platforms
     </button>
     <button data-view="goals">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
       Goals
-    </button>
-    <button data-view="transactions">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      History
     </button>
   </nav>
 </div>
@@ -414,6 +364,25 @@
         <button type="submit" class="btn btn-primary" id="tx-submit">Save transaction</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Platform transaction history                            -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-platform-history">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="platform-history-title">Transactions</h3>
+      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal__body">
+      <p class="goal-modal-hint" id="platform-history-hint"></p>
+      <div class="tx-list goal-history" id="platform-history-list"></div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-primary" id="platform-history-add">Add transaction</button>
+      </div>
+    </div>
   </div>
 </div>
 

@@ -22,6 +22,7 @@ const state = {
   goals: [],          // [{ id, name, description, target_amount, target_date, status, completed_at, saved }]
   contributions: [],  // [{ id, goal_id, amount, date, note }]
   goalsReady: true,   // false when the goals tables don't exist yet
+  txReturnPlatformId: null, // platform whose history to reopen after editing a transaction from it
   pendingLogoFile: null,
   pendingLogoRemoved: false,
 };
@@ -162,6 +163,7 @@ function setActiveView(name) {
   $$('.view').forEach(v => v.classList.toggle('is-active', v.id === `view-${name}`));
   $$('.nav__item').forEach(b => b.classList.toggle('is-active', b.dataset.view === name));
   $$('.mobile-nav button').forEach(b => b.classList.toggle('is-active', b.dataset.view === name));
+  if (name === 'goals') { goalBarChart?.resize(); goalDistChart?.resize(); }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -176,7 +178,14 @@ $$('[data-nav]').forEach(btn => {
    6. MODALS
    --------------------------------------------------------- */
 function openModal(id) { $(`#${id}`).classList.add('is-open'); }
-function closeModal(id) { $(`#${id}`).classList.remove('is-open'); }
+function closeModal(id) {
+  $(`#${id}`).classList.remove('is-open');
+  if (id === 'modal-tx' && state.txReturnPlatformId) {
+    const back = state.txReturnPlatformId;
+    state.txReturnPlatformId = null;
+    openPlatformHistory(back);
+  }
+}
 
 $$('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay.id); });
@@ -204,7 +213,6 @@ async function loadAllData() {
   await loadContributions();
   renderDashboard();
   renderPlatforms();
-  renderTransactions();
   renderGoals();
 }
 
@@ -242,7 +250,7 @@ function setTheme(theme, persist = false) {
     }
   }
 
-  if ($('#app').classList.contains('is-ready')) renderDashboard();
+  if ($('#app').classList.contains('is-ready')) { renderDashboard(); renderGoalCharts(); }
 }
 
 function setupThemeToggle() {
@@ -264,18 +272,8 @@ function renderDashboard() {
     : 'Add a platform to get started';
   $('#stat-platforms').textContent = state.platforms.length;
 
-  // This month's net savings
-  const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthTx = state.transactions.filter(t => t.date.startsWith(ym));
-  const monthNet = monthTx.reduce((sum, t) => sum + (t.type === 'deposit' ? Number(t.amount) : -Number(t.amount)), 0);
-  $('#stat-month').textContent = peso(monthNet);
-  $('#stat-month-sub').textContent = `${monthTx.length} transaction${monthTx.length === 1 ? '' : 's'} this month`;
-  $('#stat-month-sub').className = 'stat-card__sub ' + (monthNet > 0 ? 'is-up' : monthNet < 0 ? 'is-down' : '');
-
   renderDistributionChart(total);
   renderGrowthChart();
-  renderRecentTransactions();
 }
 
 function renderDistributionChart(total) {
@@ -397,33 +395,6 @@ function renderGrowthChart() {
   });
 }
 
-function renderRecentTransactions() {
-  const list = $('#recent-tx-list');
-  const recent = state.transactions.slice(0, 6);
-  if (!recent.length) {
-    list.innerHTML = `<div class="empty-state"><p>No transactions yet. Add your first deposit to get started.</p></div>`;
-    return;
-  }
-  list.innerHTML = recent.map(t => txRowHtml(t)).join('');
-}
-
-function txRowHtml(t) {
-  const p = platformById(t.platform_id);
-  const logo = p?.logo_url
-    ? `<img src="${p.logo_url}" alt="">`
-    : `<span style="font-family:var(--font-display);font-weight:600;color:var(--primary-dark);">${initials(p?.name)}</span>`;
-  const sign = t.type === 'deposit' ? '+' : '−';
-  return `
-    <div class="tx-row">
-      <div class="tx-row__icon">${logo}</div>
-      <div class="tx-row__body">
-        <div class="tx-row__title">${escapeHtml(p?.name || 'Unknown platform')}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
-        <div class="tx-row__sub">${formatDate(t.date)}</div>
-      </div>
-      <div class="tx-row__amt ${t.type} num">${sign}${peso(t.amount)}</div>
-    </div>`;
-}
-
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
@@ -451,7 +422,8 @@ function renderPlatforms() {
         <div class="platform-card__pct num">${pct.toFixed(1)}% of total</div>
         <div class="platform-card__bar"><span style="width:${pct}%"></span></div>
         <div class="platform-card__actions">
-          <button class="btn btn-ghost btn-sm" data-action="view" data-id="${p.id}">View</button>
+          <button class="btn btn-primary btn-sm platform-card__add" data-action="add-tx" data-id="${p.id}">Add transaction</button>
+          <button class="btn btn-ghost btn-sm" data-action="history" data-id="${p.id}">History</button>
           <button class="btn btn-soft btn-sm" data-action="edit" data-id="${p.id}">Edit</button>
         </div>
       </div>`;
@@ -464,11 +436,11 @@ function renderPlatforms() {
     </button>`;
 
   $('#add-platform-tile').addEventListener('click', () => openPlatformModal());
-  $$('[data-action="view"]', grid).forEach(b => b.addEventListener('click', () => {
-    $('#tx-filter-platform').value = b.dataset.id;
-    setActiveView('transactions');
-    renderTransactions();
+  $$('[data-action="add-tx"]', grid).forEach(b => b.addEventListener('click', () => {
+    state.txReturnPlatformId = null;
+    openTxModal(null, b.dataset.id);
   }));
+  $$('[data-action="history"]', grid).forEach(b => b.addEventListener('click', () => openPlatformHistory(b.dataset.id)));
   $$('[data-action="edit"]', grid).forEach(b => b.addEventListener('click', () => openPlatformModal(platformById(b.dataset.id))));
 }
 
@@ -605,60 +577,71 @@ async function deletePlatform(id) {
    10. TRANSACTIONS
    --------------------------------------------------------- */
 function populatePlatformSelects() {
-  const selectedFilterPlatform = $('#tx-filter-platform').value;
-  const opts = state.platforms.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-  $('#tx-platform').innerHTML = opts || '<option value="">No platforms yet</option>';
-  $('#tx-filter-platform').innerHTML = '<option value="">All platforms</option>' + opts;
-  $('#tx-filter-platform').value = selectedFilterPlatform;
+  $('#tx-platform').innerHTML = state.platforms.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+    || '<option value="">No platforms yet</option>';
 }
 
-function renderTransactions() {
-  populatePlatformSelects();
-  const platformFilter = $('#tx-filter-platform').value;
-  const typeFilter = $('#tx-filter-type').value;
+/* ---- Platform history (floating modal, same pattern as goal history) ---- */
+function openPlatformHistory(platformId) {
+  const platform = platformById(platformId);
+  if (!platform) return;
+  const rows = state.transactions.filter(t => t.platform_id === platformId);
+  $('#platform-history-title').textContent = `${platform.name} · transactions`;
+  $('#platform-history-hint').textContent = `Balance ${peso(platform.balance)} · ${plural(rows.length, 'transaction')}`;
 
-  const rows = state.transactions.filter(t =>
-    (!platformFilter || t.platform_id === platformFilter) &&
-    (!typeFilter || t.type === typeFilter)
-  );
-
-  const tbody = $('#tx-table-body');
-  $('#tx-empty').style.display = rows.length ? 'none' : 'block';
-  $('.tx-table').style.display = rows.length ? 'table' : 'none';
-
-  tbody.innerHTML = rows.map(t => {
-    const p = platformById(t.platform_id);
-    const logo = p?.logo_url ? `<img src="${p.logo_url}" alt="">` : initials(p?.name);
-    const sign = t.type === 'deposit' ? '+' : '−';
-    return `
-      <tr>
-        <td><div class="cell-platform"><div class="cell-platform__logo">${logo}</div>${escapeHtml(p?.name || 'Unknown')}</div></td>
-        <td><span class="badge badge-${t.type}">${t.type === 'deposit' ? 'Deposit' : 'Withdrawal'}</span></td>
-        <td>${escapeHtml(t.note || '—')}</td>
-        <td>${formatDate(t.date)}</td>
-        <td style="text-align:right" class="num ${t.type === 'deposit' ? 'tx-row__amt deposit' : 'tx-row__amt withdrawal'}">${sign}${peso(t.amount)}</td>
-        <td>
-          <div class="row-actions">
-            <button class="icon-btn" data-action="edit-tx" data-id="${t.id}" title="Edit">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="icon-btn" data-action="delete-tx" data-id="${t.id}" title="Delete">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
-            </button>
-          </div>
-        </td>
-      </tr>`;
-  }).join('');
-
-  $$('[data-action="edit-tx"]', tbody).forEach(b => b.addEventListener('click', () => openTxModal(state.transactions.find(t => t.id === b.dataset.id))));
-  $$('[data-action="delete-tx"]', tbody).forEach(b => b.addEventListener('click', () => {
-    askConfirm('Delete transaction?', 'This will update the platform balance accordingly.', () => deleteTransaction(b.dataset.id));
-  }));
+  const list = $('#platform-history-list');
+  list.dataset.platformId = platformId;
+  list.innerHTML = rows.length
+    ? rows.map(t => {
+        const label = t.type === 'deposit' ? 'Deposit' : 'Withdrawal';
+        const sign = t.type === 'deposit' ? '+' : '−';
+        return `
+      <div class="tx-row">
+        <div class="tx-row__body">
+          <div class="tx-row__title">${escapeHtml(t.note || label)}</div>
+          <div class="tx-row__sub">${formatDate(t.date)}${t.note ? ' · ' + label : ''}</div>
+        </div>
+        <div class="tx-row__amt ${t.type} num">${sign}${peso(t.amount)}</div>
+        <button class="icon-btn" type="button" data-edit-tx="${t.id}" title="Edit transaction" aria-label="Edit transaction">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="icon-btn" type="button" data-delete-tx="${t.id}" title="Delete transaction" aria-label="Delete transaction">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
+        </button>
+      </div>`;
+      }).join('')
+    : `<div class="empty-state"><p>No transactions yet. Use "Add transaction" to log your first deposit.</p></div>`;
+  openModal('modal-platform-history');
 }
 
-$('#tx-filter-platform').addEventListener('change', renderTransactions);
-$('#tx-filter-type').addEventListener('change', renderTransactions);
-$('#add-tx-btn').addEventListener('click', () => openTxModal());
+$('#platform-history-list').addEventListener('click', (e) => {
+  const list = $('#platform-history-list');
+  const platformId = list.dataset.platformId;
+  const editBtn = e.target.closest('[data-edit-tx]');
+  const delBtn = e.target.closest('[data-delete-tx]');
+
+  if (editBtn) {
+    const tx = state.transactions.find(t => t.id === editBtn.dataset.editTx);
+    if (!tx) return;
+    closeModal('modal-platform-history');
+    state.txReturnPlatformId = platformId;   // come back to History after saving or cancelling
+    openTxModal(tx);
+  } else if (delBtn) {
+    const id = delBtn.dataset.deleteTx;
+    closeModal('modal-platform-history');
+    askConfirm('Delete transaction?', 'This will update the platform balance accordingly.', async () => {
+      await deleteTransaction(id);
+      openPlatformHistory(platformId);
+    });
+  }
+});
+
+$('#platform-history-add').addEventListener('click', () => {
+  const platformId = $('#platform-history-list').dataset.platformId;
+  closeModal('modal-platform-history');
+  state.txReturnPlatformId = platformId;
+  openTxModal(null, platformId);
+});
 
 let currentTxType = 'deposit';
 $$('#tx-type-toggle button').forEach(btn => {
@@ -668,7 +651,7 @@ $$('#tx-type-toggle button').forEach(btn => {
   });
 });
 
-function openTxModal(tx = null) {
+function openTxModal(tx = null, platformId = null) {
   if (!state.platforms.length) {
     toast('Add a platform first', 'error');
     return;
@@ -677,7 +660,7 @@ function openTxModal(tx = null) {
   $('#tx-error').textContent = '';
   $('#tx-modal-title').textContent = tx ? 'Edit transaction' : 'Add transaction';
   $('#tx-id').value = tx?.id || '';
-  $('#tx-platform').value = tx?.platform_id || state.platforms[0].id;
+  $('#tx-platform').value = tx?.platform_id || platformId || state.platforms[0].id;
   $('#tx-amount').value = tx?.amount || '';
   $('#tx-date').value = tx?.date || new Date().toISOString().slice(0, 10);
   $('#tx-note').value = tx?.note || '';
@@ -716,8 +699,11 @@ $('#tx-form').addEventListener('submit', async (e) => {
       if (error) throw error;
       toast(`${currentTxType === 'deposit' ? 'Deposit' : 'Withdrawal'} added`, 'success');
     }
+    const back = state.txReturnPlatformId;
+    state.txReturnPlatformId = null;
     closeModal('modal-tx');
     await loadAllData();
+    if (back) openPlatformHistory(back);
   } catch (err) {
     errorEl.textContent = err.message || 'Could not save transaction.';
   } finally {
@@ -871,6 +857,100 @@ function renderGoals() {
 
   $('#goal-completed-wrap').hidden = completed.length === 0;
   $('#goal-completed-grid').innerHTML = completed.map(goalCardHtml).join('');
+  renderGoalCharts();
+}
+
+let goalBarChart, goalDistChart;
+
+function renderGoalCharts() {
+  const section = $('#goal-charts');
+  const goals = state.goals;
+  section.hidden = !state.goalsReady || goals.length === 0;
+  if (section.hidden) {
+    if (goalBarChart) { goalBarChart.destroy(); goalBarChart = null; }
+    if (goalDistChart) { goalDistChart.destroy(); goalDistChart = null; }
+    return;
+  }
+
+  const styles = getComputedStyle(document.documentElement);
+  const primary = styles.getPropertyValue('--primary').trim();
+  const trackFill = styles.getPropertyValue('--surface-sunk').trim();
+  const trackEdge = styles.getPropertyValue('--border').trim();
+  const chartGrid = styles.getPropertyValue('--chart-grid').trim();
+  const chartText = styles.getPropertyValue('--ink-soft').trim();
+  const inkText = styles.getPropertyValue('--ink').trim();
+  const tooltipBackground = styles.getPropertyValue('--surface-sunk').trim();
+  const short = (name) => name.length > 18 ? name.slice(0, 17) + '…' : name;
+
+  /* Saved vs target, one pair of bars per goal */
+  $('#goal-bar-wrap').style.height = Math.min(Math.max(goals.length * 58 + 70, 190), 460) + 'px';
+  $('#goal-bar-wrap').classList.remove('is-empty');
+  if (goalBarChart) goalBarChart.destroy();
+  goalBarChart = new Chart($('#goal-bar-chart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: goals.map(g => short(g.name)),
+      datasets: [
+        { label: 'Saved', data: goals.map(g => g.saved), backgroundColor: primary, borderRadius: 4, barPercentage: 0.8, categoryPercentage: 0.7 },
+        { label: 'Target', data: goals.map(g => g.target_amount), backgroundColor: trackFill, borderColor: trackEdge, borderWidth: 1, borderRadius: 4, barPercentage: 0.8, categoryPercentage: 0.7 },
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: chartText, boxWidth: 10, boxHeight: 10, usePointStyle: true } },
+        tooltip: {
+          backgroundColor: tooltipBackground, titleColor: inkText, bodyColor: inkText,
+          callbacks: {
+            title: (items) => goals[items[0].dataIndex].name,
+            label: (ctx) => `${ctx.dataset.label}: ${pesoGoal(ctx.raw)}`,
+          }
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { color: chartText, callback: (v) => '₱' + Number(v).toLocaleString('en-PH') }, grid: { color: chartGrid } },
+        y: { ticks: { color: chartText }, grid: { display: false } }
+      }
+    }
+  });
+
+  /* Share of total goal savings, one slice per goal */
+  const legend = $('#goal-dist-legend');
+  legend.innerHTML = '';
+  const funded = goals.filter(g => g.saved > 0).sort((a, b) => b.saved - a.saved);
+  const totalSaved = funded.reduce((sum, g) => sum + g.saved, 0);
+  const distWrap = $('#goal-dist-wrap');
+  if (!funded.length) {
+    distWrap.classList.add('is-empty');
+    if (goalDistChart) { goalDistChart.destroy(); goalDistChart = null; }
+    return;
+  }
+  distWrap.classList.remove('is-empty');
+  const colors = funded.map((_, i) => PLATFORM_COLORS[i % PLATFORM_COLORS.length]);
+  if (goalDistChart) goalDistChart.destroy();
+  goalDistChart = new Chart($('#goal-dist-chart').getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: funded.map(g => g.name), datasets: [{ data: funded.map(g => g.saved), backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBackground, titleColor: inkText, bodyColor: inkText,
+          callbacks: { label: (ctx) => `${ctx.label}: ${pesoGoal(ctx.raw)}` }
+        }
+      }
+    }
+  });
+  funded.forEach((g, i) => {
+    const row = document.createElement('div');
+    row.className = 'legend__row';
+    row.innerHTML = `<span class="legend__dot" style="background:${colors[i]}"></span>
+      <span class="legend__name">${escapeHtml(g.name)}</span>
+      <span class="legend__val num">${((g.saved / totalSaved) * 100).toFixed(1)}%</span>`;
+    legend.appendChild(row);
+  });
 }
 
 // One delegated listener covers both grids and the dynamic add tile.

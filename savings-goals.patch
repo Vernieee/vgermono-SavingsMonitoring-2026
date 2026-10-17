@@ -1,7 +1,8 @@
 From c531f226577ff2f007daf6da57c442cec09960f2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 17 Oct 2026 04:31:33 +0000
-Subject: [PATCH] Add Savings Goals: goals, contributions, progress, dashboard
+Subject: [PATCH 1/5] Add Savings Goals: goals, contributions, progress,
+ dashboard
 
 ---
  app.js             | 338 ++++++++++++++++++++++++++++++++++++++++++++-
@@ -757,6 +758,805 @@ index 0000000..498dc0b
 +  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 +create policy "goal_contributions_delete_own" on public.goal_contributions
 +  for delete using (auth.uid() = user_id);
+-- 
+2.43.0
+
+
+From 6bbe8a08d84ae448b1c09413138ab87a2b5d8104 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 17 Oct 2026 05:04:23 +0000
+Subject: [PATCH 2/5] Goals SQL: rebuild empty leftover goals tables, refuse if
+ they hold data
+
+---
+ supabase-goals.sql | 50 +++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 49 insertions(+), 1 deletion(-)
+
+diff --git a/supabase-goals.sql b/supabase-goals.sql
+index 498dc0b..322022f 100644
+--- a/supabase-goals.sql
++++ b/supabase-goals.sql
+@@ -1,13 +1,61 @@
+ -- =========================================================
+ -- Ipon — Savings Goals
+ -- Run this once in the Supabase SQL editor, AFTER supabase.sql.
+--- Safe to re-run: every statement is idempotent.
++-- Safe to re-run. Leftover tables with the wrong layout are rebuilt
++-- only if empty (see Step 0).
+ --
+ -- Goals are an allocation layer on top of your platform
+ -- balances: adding money to a goal does NOT change any
+ -- platform balance or create a transaction.
+ -- =========================================================
+ 
++-- ---------------------------------------------------------
++-- Step 0: handle leftover tables
++-- If a goals / goal_contributions table already exists with a
++-- different shape (e.g. from an earlier experiment), "create table
++-- if not exists" would silently keep it and later steps would fail.
++--   * correct shape      -> left alone (script stays re-runnable)
++--   * wrong shape, empty -> dropped and recreated below
++--   * wrong shape, rows  -> script STOPS so no data is lost
++-- ---------------------------------------------------------
++do $$
++declare
++  goals_ok   boolean;
++  contrib_ok boolean;
++  n          bigint;
++begin
++  select count(*) = 9 into goals_ok
++  from information_schema.columns
++  where table_schema = 'public' and table_name = 'goals'
++    and column_name in ('id','user_id','name','description','target_amount',
++                        'target_date','status','completed_at','created_at');
++
++  select count(*) = 7 into contrib_ok
++  from information_schema.columns
++  where table_schema = 'public' and table_name = 'goal_contributions'
++    and column_name in ('id','user_id','goal_id','amount','date','note','created_at');
++
++  if to_regclass('public.goals') is not null and not goals_ok then
++    execute 'select count(*) from public.goals' into n;
++    if n > 0 then
++      raise exception 'public.goals already exists with a different layout and holds % row(s). Not dropping it. Rename it or migrate it first.', n;
++    end if;
++    drop view if exists public.goal_progress;
++    drop table if exists public.goal_contributions;
++    drop table public.goals;
++    contrib_ok := false;
++  end if;
++
++  if to_regclass('public.goal_contributions') is not null and not contrib_ok then
++    execute 'select count(*) from public.goal_contributions' into n;
++    if n > 0 then
++      raise exception 'public.goal_contributions already exists with a different layout and holds % row(s). Not dropping it. Rename it or migrate it first.', n;
++    end if;
++    drop view if exists public.goal_progress;
++    drop table public.goal_contributions;
++  end if;
++end $$;
++
+ -- ---------------------------------------------------------
+ -- Tables
+ -- ---------------------------------------------------------
+-- 
+2.43.0
+
+
+From 13070fbee9a82d84abaa2038e757ae9707f28eb4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 17 Oct 2026 05:35:59 +0000
+Subject: [PATCH 3/5] Merge Dashboard into Platforms tab; add graphs to Goals
+ tab
+
+---
+ app.js     | 97 +++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ index.html | 58 +++++++++++++++++---------------
+ style.css  |  7 ++++
+ 3 files changed, 135 insertions(+), 27 deletions(-)
+
+diff --git a/app.js b/app.js
+index 78165a2..830e573 100644
+--- a/app.js
++++ b/app.js
+@@ -162,6 +162,7 @@ function setActiveView(name) {
+   $$('.view').forEach(v => v.classList.toggle('is-active', v.id === `view-${name}`));
+   $$('.nav__item').forEach(b => b.classList.toggle('is-active', b.dataset.view === name));
+   $$('.mobile-nav button').forEach(b => b.classList.toggle('is-active', b.dataset.view === name));
++  if (name === 'goals') { goalBarChart?.resize(); goalDistChart?.resize(); }
+   window.scrollTo({ top: 0, behavior: 'smooth' });
+ }
+ 
+@@ -242,7 +243,7 @@ function setTheme(theme, persist = false) {
+     }
+   }
+ 
+-  if ($('#app').classList.contains('is-ready')) renderDashboard();
++  if ($('#app').classList.contains('is-ready')) { renderDashboard(); renderGoalCharts(); }
+ }
+ 
+ function setupThemeToggle() {
+@@ -871,6 +872,100 @@ function renderGoals() {
+ 
+   $('#goal-completed-wrap').hidden = completed.length === 0;
+   $('#goal-completed-grid').innerHTML = completed.map(goalCardHtml).join('');
++  renderGoalCharts();
++}
++
++let goalBarChart, goalDistChart;
++
++function renderGoalCharts() {
++  const section = $('#goal-charts');
++  const goals = state.goals;
++  section.hidden = !state.goalsReady || goals.length === 0;
++  if (section.hidden) {
++    if (goalBarChart) { goalBarChart.destroy(); goalBarChart = null; }
++    if (goalDistChart) { goalDistChart.destroy(); goalDistChart = null; }
++    return;
++  }
++
++  const styles = getComputedStyle(document.documentElement);
++  const primary = styles.getPropertyValue('--primary').trim();
++  const trackFill = styles.getPropertyValue('--surface-sunk').trim();
++  const trackEdge = styles.getPropertyValue('--border').trim();
++  const chartGrid = styles.getPropertyValue('--chart-grid').trim();
++  const chartText = styles.getPropertyValue('--ink-soft').trim();
++  const inkText = styles.getPropertyValue('--ink').trim();
++  const tooltipBackground = styles.getPropertyValue('--surface-sunk').trim();
++  const short = (name) => name.length > 18 ? name.slice(0, 17) + '…' : name;
++
++  /* Saved vs target, one pair of bars per goal */
++  $('#goal-bar-wrap').style.height = Math.min(Math.max(goals.length * 58 + 70, 190), 460) + 'px';
++  $('#goal-bar-wrap').classList.remove('is-empty');
++  if (goalBarChart) goalBarChart.destroy();
++  goalBarChart = new Chart($('#goal-bar-chart').getContext('2d'), {
++    type: 'bar',
++    data: {
++      labels: goals.map(g => short(g.name)),
++      datasets: [
++        { label: 'Saved', data: goals.map(g => g.saved), backgroundColor: primary, borderRadius: 4, barPercentage: 0.8, categoryPercentage: 0.7 },
++        { label: 'Target', data: goals.map(g => g.target_amount), backgroundColor: trackFill, borderColor: trackEdge, borderWidth: 1, borderRadius: 4, barPercentage: 0.8, categoryPercentage: 0.7 },
++      ]
++    },
++    options: {
++      indexAxis: 'y',
++      responsive: true, maintainAspectRatio: false,
++      plugins: {
++        legend: { position: 'bottom', labels: { color: chartText, boxWidth: 10, boxHeight: 10, usePointStyle: true } },
++        tooltip: {
++          backgroundColor: tooltipBackground, titleColor: inkText, bodyColor: inkText,
++          callbacks: {
++            title: (items) => goals[items[0].dataIndex].name,
++            label: (ctx) => `${ctx.dataset.label}: ${pesoGoal(ctx.raw)}`,
++          }
++        }
++      },
++      scales: {
++        x: { beginAtZero: true, ticks: { color: chartText, callback: (v) => '₱' + Number(v).toLocaleString('en-PH') }, grid: { color: chartGrid } },
++        y: { ticks: { color: chartText }, grid: { display: false } }
++      }
++    }
++  });
++
++  /* Share of total goal savings, one slice per goal */
++  const legend = $('#goal-dist-legend');
++  legend.innerHTML = '';
++  const funded = goals.filter(g => g.saved > 0).sort((a, b) => b.saved - a.saved);
++  const totalSaved = funded.reduce((sum, g) => sum + g.saved, 0);
++  const distWrap = $('#goal-dist-wrap');
++  if (!funded.length) {
++    distWrap.classList.add('is-empty');
++    if (goalDistChart) { goalDistChart.destroy(); goalDistChart = null; }
++    return;
++  }
++  distWrap.classList.remove('is-empty');
++  const colors = funded.map((_, i) => PLATFORM_COLORS[i % PLATFORM_COLORS.length]);
++  if (goalDistChart) goalDistChart.destroy();
++  goalDistChart = new Chart($('#goal-dist-chart').getContext('2d'), {
++    type: 'doughnut',
++    data: { labels: funded.map(g => g.name), datasets: [{ data: funded.map(g => g.saved), backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }] },
++    options: {
++      responsive: true, maintainAspectRatio: false, cutout: '68%',
++      plugins: {
++        legend: { display: false },
++        tooltip: {
++          backgroundColor: tooltipBackground, titleColor: inkText, bodyColor: inkText,
++          callbacks: { label: (ctx) => `${ctx.label}: ${pesoGoal(ctx.raw)}` }
++        }
++      }
++    }
++  });
++  funded.forEach((g, i) => {
++    const row = document.createElement('div');
++    row.className = 'legend__row';
++    row.innerHTML = `<span class="legend__dot" style="background:${colors[i]}"></span>
++      <span class="legend__name">${escapeHtml(g.name)}</span>
++      <span class="legend__val num">${((g.saved / totalSaved) * 100).toFixed(1)}%</span>`;
++    legend.appendChild(row);
++  });
+ }
+ 
+ // One delegated listener covers both grids and the dynamic add tile.
+diff --git a/index.html b/index.html
+index 7e3bf6a..14ac8d4 100644
+--- a/index.html
++++ b/index.html
+@@ -76,11 +76,7 @@
+     </div>
+ 
+     <nav class="nav">
+-      <button class="nav__item is-active" data-view="dashboard">
+-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
+-        Dashboard
+-      </button>
+-      <button class="nav__item" data-view="platforms">
++      <button class="nav__item is-active" data-view="platforms">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+         Platforms
+       </button>
+@@ -123,12 +119,15 @@
+ 
+   <main class="main">
+ 
+-    <!-- ===================== Dashboard ===================== -->
+-    <section class="view is-active" id="view-dashboard">
++    <!-- ===================== Platforms ===================== -->
++    <section class="view is-active" id="view-platforms">
+       <div class="page-head">
+-        <div><h2>Dashboard</h2><p>A snapshot of everywhere you keep your savings.</p></div>
++        <div><h2>Platforms</h2><p>Every bank and e-wallet you keep savings in.</p></div>
++        <button class="btn btn-primary" id="add-platform-btn">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
++          Add platform
++        </button>
+       </div>
+-
+       <div class="stat-grid">
+         <div class="stat-card">
+           <div class="stat-card__top">
+@@ -185,6 +184,9 @@
+         </div>
+       </div>
+ 
++      <h3 class="section-title">Your platforms</h3>
++      <div class="platform-grid" id="platform-grid"></div>
++
+       <div class="panel">
+         <div class="panel__head">
+           <div><h3>Recent transactions</h3><p>Your last 6 deposits and withdrawals</p></div>
+@@ -194,18 +196,6 @@
+       </div>
+     </section>
+ 
+-    <!-- ===================== Platforms ===================== -->
+-    <section class="view" id="view-platforms">
+-      <div class="page-head">
+-        <div><h2>Platforms</h2><p>Every bank and e-wallet you keep savings in.</p></div>
+-        <button class="btn btn-primary" id="add-platform-btn">
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+-          Add platform
+-        </button>
+-      </div>
+-      <div class="platform-grid" id="platform-grid"></div>
+-    </section>
+-
+     <!-- ===================== Goals ===================== -->
+     <section class="view" id="view-goals">
+       <div class="page-head">
+@@ -257,6 +247,26 @@
+         </div>
+       </div>
+ 
++      <div class="panel-grid" id="goal-charts" hidden>
++        <div class="panel">
++          <div class="panel__head">
++            <div><h3>Goal progress</h3><p>Saved vs target for each goal</p></div>
++          </div>
++          <div class="chart-wrap" id="goal-bar-wrap" data-empty="Add money to a goal to see its progress">
++            <canvas id="goal-bar-chart"></canvas>
++          </div>
++        </div>
++        <div class="panel">
++          <div class="panel__head">
++            <div><h3>Savings by goal</h3><p>Where your goal savings are going</p></div>
++          </div>
++          <div class="chart-wrap" id="goal-dist-wrap" data-empty="Add money to a goal to see the breakdown" style="height:150px;">
++            <canvas id="goal-dist-chart"></canvas>
++          </div>
++          <div class="legend" id="goal-dist-legend"></div>
++        </div>
++      </div>
++
+       <div class="goal-notice" id="goal-setup-note" hidden>
+         Goals need two new database tables. Run <strong>supabase-goals.sql</strong> in your Supabase SQL editor, then refresh this page.
+       </div>
+@@ -310,11 +320,7 @@
+ 
+   <!-- Mobile bottom nav -->
+   <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
+-    <button data-view="dashboard" class="is-active">
+-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
+-      Home
+-    </button>
+-    <button data-view="platforms">
++    <button data-view="platforms" class="is-active">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+       Platforms
+     </button>
+diff --git a/style.css b/style.css
+index a92209c..d1fdbc9 100644
+--- a/style.css
++++ b/style.css
+@@ -679,3 +679,10 @@ footer span {
+   .goal-card__pct { font-size: 30px; }
+   .mobile-nav button { padding: 4px 6px; }
+ }
++
++/* =========================================================
++   Platforms tab (now includes the former Dashboard)
++   ========================================================= */
++.section-title { font-size: 17px; font-weight: 600; margin: 8px 0 14px; }
++#view-platforms .platform-grid { margin-bottom: 26px; }
++.panel-grid[hidden] { display: none; }
+-- 
+2.43.0
+
+
+From 2435305711e67b455c063bbf03f84b070963cfa4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 17 Oct 2026 05:38:58 +0000
+Subject: [PATCH 4/5] Platforms tab: keep only Total savings, Platforms, growth
+ and distribution
+
+---
+ app.js     | 37 -------------------------------------
+ index.html | 19 +------------------
+ style.css  |  2 ++
+ 3 files changed, 3 insertions(+), 55 deletions(-)
+
+diff --git a/app.js b/app.js
+index 830e573..fcebb31 100644
+--- a/app.js
++++ b/app.js
+@@ -265,18 +265,8 @@ function renderDashboard() {
+     : 'Add a platform to get started';
+   $('#stat-platforms').textContent = state.platforms.length;
+ 
+-  // This month's net savings
+-  const now = new Date();
+-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+-  const monthTx = state.transactions.filter(t => t.date.startsWith(ym));
+-  const monthNet = monthTx.reduce((sum, t) => sum + (t.type === 'deposit' ? Number(t.amount) : -Number(t.amount)), 0);
+-  $('#stat-month').textContent = peso(monthNet);
+-  $('#stat-month-sub').textContent = `${monthTx.length} transaction${monthTx.length === 1 ? '' : 's'} this month`;
+-  $('#stat-month-sub').className = 'stat-card__sub ' + (monthNet > 0 ? 'is-up' : monthNet < 0 ? 'is-down' : '');
+-
+   renderDistributionChart(total);
+   renderGrowthChart();
+-  renderRecentTransactions();
+ }
+ 
+ function renderDistributionChart(total) {
+@@ -398,33 +388,6 @@ function renderGrowthChart() {
+   });
+ }
+ 
+-function renderRecentTransactions() {
+-  const list = $('#recent-tx-list');
+-  const recent = state.transactions.slice(0, 6);
+-  if (!recent.length) {
+-    list.innerHTML = `<div class="empty-state"><p>No transactions yet. Add your first deposit to get started.</p></div>`;
+-    return;
+-  }
+-  list.innerHTML = recent.map(t => txRowHtml(t)).join('');
+-}
+-
+-function txRowHtml(t) {
+-  const p = platformById(t.platform_id);
+-  const logo = p?.logo_url
+-    ? `<img src="${p.logo_url}" alt="">`
+-    : `<span style="font-family:var(--font-display);font-weight:600;color:var(--primary-dark);">${initials(p?.name)}</span>`;
+-  const sign = t.type === 'deposit' ? '+' : '−';
+-  return `
+-    <div class="tx-row">
+-      <div class="tx-row__icon">${logo}</div>
+-      <div class="tx-row__body">
+-        <div class="tx-row__title">${escapeHtml(p?.name || 'Unknown platform')}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
+-        <div class="tx-row__sub">${formatDate(t.date)}</div>
+-      </div>
+-      <div class="tx-row__amt ${t.type} num">${sign}${peso(t.amount)}</div>
+-    </div>`;
+-}
+-
+ function escapeHtml(str) {
+   const div = document.createElement('div');
+   div.textContent = str ?? '';
+diff --git a/index.html b/index.html
+index 14ac8d4..e2476f4 100644
+--- a/index.html
++++ b/index.html
+@@ -128,7 +128,7 @@
+           Add platform
+         </button>
+       </div>
+-      <div class="stat-grid">
++      <div class="stat-grid stat-grid--2">
+         <div class="stat-card">
+           <div class="stat-card__top">
+             <span class="stat-card__label">Total savings</span>
+@@ -151,16 +151,6 @@
+           <div class="stat-card__sub">Banks &amp; e-wallets tracked</div>
+         </div>
+ 
+-        <div class="stat-card">
+-          <div class="stat-card__top">
+-            <span class="stat-card__label">This month</span>
+-            <div class="stat-card__icon tone-accent">
+-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+-            </div>
+-          </div>
+-          <div class="stat-card__value num" id="stat-month">₱0.00</div>
+-          <div class="stat-card__sub" id="stat-month-sub">Net saved this month</div>
+-        </div>
+ 
+       </div>
+ 
+@@ -187,13 +177,6 @@
+       <h3 class="section-title">Your platforms</h3>
+       <div class="platform-grid" id="platform-grid"></div>
+ 
+-      <div class="panel">
+-        <div class="panel__head">
+-          <div><h3>Recent transactions</h3><p>Your last 6 deposits and withdrawals</p></div>
+-          <button class="btn btn-soft btn-sm" data-nav="transactions">View all</button>
+-        </div>
+-        <div class="tx-list" id="recent-tx-list"></div>
+-      </div>
+     </section>
+ 
+     <!-- ===================== Goals ===================== -->
+diff --git a/style.css b/style.css
+index d1fdbc9..689b012 100644
+--- a/style.css
++++ b/style.css
+@@ -686,3 +686,5 @@ footer span {
+ .section-title { font-size: 17px; font-weight: 600; margin: 8px 0 14px; }
+ #view-platforms .platform-grid { margin-bottom: 26px; }
+ .panel-grid[hidden] { display: none; }
++
++.stat-grid--2 { grid-template-columns: repeat(2, 1fr); }
+-- 
+2.43.0
+
+
+From e63b7fc00b8243106309d5c6001da01726407d05 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 17 Oct 2026 05:43:16 +0000
+Subject: [PATCH 5/5] Remove Transactions tab; platform cards get Add
+ transaction / History / Edit with floating history modal
+
+---
+ app.js     | 140 +++++++++++++++++++++++++++++++----------------------
+ index.html |  58 ++++++++--------------
+ style.css  |   4 ++
+ 3 files changed, 104 insertions(+), 98 deletions(-)
+
+diff --git a/app.js b/app.js
+index fcebb31..b90860b 100644
+--- a/app.js
++++ b/app.js
+@@ -22,6 +22,7 @@ const state = {
+   goals: [],          // [{ id, name, description, target_amount, target_date, status, completed_at, saved }]
+   contributions: [],  // [{ id, goal_id, amount, date, note }]
+   goalsReady: true,   // false when the goals tables don't exist yet
++  txReturnPlatformId: null, // platform whose history to reopen after editing a transaction from it
+   pendingLogoFile: null,
+   pendingLogoRemoved: false,
+ };
+@@ -177,7 +178,14 @@ $$('[data-nav]').forEach(btn => {
+    6. MODALS
+    --------------------------------------------------------- */
+ function openModal(id) { $(`#${id}`).classList.add('is-open'); }
+-function closeModal(id) { $(`#${id}`).classList.remove('is-open'); }
++function closeModal(id) {
++  $(`#${id}`).classList.remove('is-open');
++  if (id === 'modal-tx' && state.txReturnPlatformId) {
++    const back = state.txReturnPlatformId;
++    state.txReturnPlatformId = null;
++    openPlatformHistory(back);
++  }
++}
+ 
+ $$('.modal-overlay').forEach(overlay => {
+   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay.id); });
+@@ -205,7 +213,6 @@ async function loadAllData() {
+   await loadContributions();
+   renderDashboard();
+   renderPlatforms();
+-  renderTransactions();
+   renderGoals();
+ }
+ 
+@@ -415,7 +422,8 @@ function renderPlatforms() {
+         <div class="platform-card__pct num">${pct.toFixed(1)}% of total</div>
+         <div class="platform-card__bar"><span style="width:${pct}%"></span></div>
+         <div class="platform-card__actions">
+-          <button class="btn btn-ghost btn-sm" data-action="view" data-id="${p.id}">View</button>
++          <button class="btn btn-primary btn-sm platform-card__add" data-action="add-tx" data-id="${p.id}">Add transaction</button>
++          <button class="btn btn-ghost btn-sm" data-action="history" data-id="${p.id}">History</button>
+           <button class="btn btn-soft btn-sm" data-action="edit" data-id="${p.id}">Edit</button>
+         </div>
+       </div>`;
+@@ -428,11 +436,11 @@ function renderPlatforms() {
+     </button>`;
+ 
+   $('#add-platform-tile').addEventListener('click', () => openPlatformModal());
+-  $$('[data-action="view"]', grid).forEach(b => b.addEventListener('click', () => {
+-    $('#tx-filter-platform').value = b.dataset.id;
+-    setActiveView('transactions');
+-    renderTransactions();
++  $$('[data-action="add-tx"]', grid).forEach(b => b.addEventListener('click', () => {
++    state.txReturnPlatformId = null;
++    openTxModal(null, b.dataset.id);
+   }));
++  $$('[data-action="history"]', grid).forEach(b => b.addEventListener('click', () => openPlatformHistory(b.dataset.id)));
+   $$('[data-action="edit"]', grid).forEach(b => b.addEventListener('click', () => openPlatformModal(platformById(b.dataset.id))));
+ }
+ 
+@@ -569,60 +577,71 @@ async function deletePlatform(id) {
+    10. TRANSACTIONS
+    --------------------------------------------------------- */
+ function populatePlatformSelects() {
+-  const selectedFilterPlatform = $('#tx-filter-platform').value;
+-  const opts = state.platforms.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+-  $('#tx-platform').innerHTML = opts || '<option value="">No platforms yet</option>';
+-  $('#tx-filter-platform').innerHTML = '<option value="">All platforms</option>' + opts;
+-  $('#tx-filter-platform').value = selectedFilterPlatform;
++  $('#tx-platform').innerHTML = state.platforms.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
++    || '<option value="">No platforms yet</option>';
+ }
+ 
+-function renderTransactions() {
+-  populatePlatformSelects();
+-  const platformFilter = $('#tx-filter-platform').value;
+-  const typeFilter = $('#tx-filter-type').value;
+-
+-  const rows = state.transactions.filter(t =>
+-    (!platformFilter || t.platform_id === platformFilter) &&
+-    (!typeFilter || t.type === typeFilter)
+-  );
+-
+-  const tbody = $('#tx-table-body');
+-  $('#tx-empty').style.display = rows.length ? 'none' : 'block';
+-  $('.tx-table').style.display = rows.length ? 'table' : 'none';
+-
+-  tbody.innerHTML = rows.map(t => {
+-    const p = platformById(t.platform_id);
+-    const logo = p?.logo_url ? `<img src="${p.logo_url}" alt="">` : initials(p?.name);
+-    const sign = t.type === 'deposit' ? '+' : '−';
+-    return `
+-      <tr>
+-        <td><div class="cell-platform"><div class="cell-platform__logo">${logo}</div>${escapeHtml(p?.name || 'Unknown')}</div></td>
+-        <td><span class="badge badge-${t.type}">${t.type === 'deposit' ? 'Deposit' : 'Withdrawal'}</span></td>
+-        <td>${escapeHtml(t.note || '—')}</td>
+-        <td>${formatDate(t.date)}</td>
+-        <td style="text-align:right" class="num ${t.type === 'deposit' ? 'tx-row__amt deposit' : 'tx-row__amt withdrawal'}">${sign}${peso(t.amount)}</td>
+-        <td>
+-          <div class="row-actions">
+-            <button class="icon-btn" data-action="edit-tx" data-id="${t.id}" title="Edit">
+-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+-            </button>
+-            <button class="icon-btn" data-action="delete-tx" data-id="${t.id}" title="Delete">
+-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
+-            </button>
+-          </div>
+-        </td>
+-      </tr>`;
+-  }).join('');
+-
+-  $$('[data-action="edit-tx"]', tbody).forEach(b => b.addEventListener('click', () => openTxModal(state.transactions.find(t => t.id === b.dataset.id))));
+-  $$('[data-action="delete-tx"]', tbody).forEach(b => b.addEventListener('click', () => {
+-    askConfirm('Delete transaction?', 'This will update the platform balance accordingly.', () => deleteTransaction(b.dataset.id));
+-  }));
++/* ---- Platform history (floating modal, same pattern as goal history) ---- */
++function openPlatformHistory(platformId) {
++  const platform = platformById(platformId);
++  if (!platform) return;
++  const rows = state.transactions.filter(t => t.platform_id === platformId);
++  $('#platform-history-title').textContent = `${platform.name} · transactions`;
++  $('#platform-history-hint').textContent = `Balance ${peso(platform.balance)} · ${plural(rows.length, 'transaction')}`;
++
++  const list = $('#platform-history-list');
++  list.dataset.platformId = platformId;
++  list.innerHTML = rows.length
++    ? rows.map(t => {
++        const label = t.type === 'deposit' ? 'Deposit' : 'Withdrawal';
++        const sign = t.type === 'deposit' ? '+' : '−';
++        return `
++      <div class="tx-row">
++        <div class="tx-row__body">
++          <div class="tx-row__title">${escapeHtml(t.note || label)}</div>
++          <div class="tx-row__sub">${formatDate(t.date)}${t.note ? ' · ' + label : ''}</div>
++        </div>
++        <div class="tx-row__amt ${t.type} num">${sign}${peso(t.amount)}</div>
++        <button class="icon-btn" type="button" data-edit-tx="${t.id}" title="Edit transaction" aria-label="Edit transaction">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
++        </button>
++        <button class="icon-btn" type="button" data-delete-tx="${t.id}" title="Delete transaction" aria-label="Delete transaction">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
++        </button>
++      </div>`;
++      }).join('')
++    : `<div class="empty-state"><p>No transactions yet. Use "Add transaction" to log your first deposit.</p></div>`;
++  openModal('modal-platform-history');
+ }
+ 
+-$('#tx-filter-platform').addEventListener('change', renderTransactions);
+-$('#tx-filter-type').addEventListener('change', renderTransactions);
+-$('#add-tx-btn').addEventListener('click', () => openTxModal());
++$('#platform-history-list').addEventListener('click', (e) => {
++  const list = $('#platform-history-list');
++  const platformId = list.dataset.platformId;
++  const editBtn = e.target.closest('[data-edit-tx]');
++  const delBtn = e.target.closest('[data-delete-tx]');
++
++  if (editBtn) {
++    const tx = state.transactions.find(t => t.id === editBtn.dataset.editTx);
++    if (!tx) return;
++    closeModal('modal-platform-history');
++    state.txReturnPlatformId = platformId;   // come back to History after saving or cancelling
++    openTxModal(tx);
++  } else if (delBtn) {
++    const id = delBtn.dataset.deleteTx;
++    closeModal('modal-platform-history');
++    askConfirm('Delete transaction?', 'This will update the platform balance accordingly.', async () => {
++      await deleteTransaction(id);
++      openPlatformHistory(platformId);
++    });
++  }
++});
++
++$('#platform-history-add').addEventListener('click', () => {
++  const platformId = $('#platform-history-list').dataset.platformId;
++  closeModal('modal-platform-history');
++  state.txReturnPlatformId = platformId;
++  openTxModal(null, platformId);
++});
+ 
+ let currentTxType = 'deposit';
+ $$('#tx-type-toggle button').forEach(btn => {
+@@ -632,7 +651,7 @@ $$('#tx-type-toggle button').forEach(btn => {
+   });
+ });
+ 
+-function openTxModal(tx = null) {
++function openTxModal(tx = null, platformId = null) {
+   if (!state.platforms.length) {
+     toast('Add a platform first', 'error');
+     return;
+@@ -641,7 +660,7 @@ function openTxModal(tx = null) {
+   $('#tx-error').textContent = '';
+   $('#tx-modal-title').textContent = tx ? 'Edit transaction' : 'Add transaction';
+   $('#tx-id').value = tx?.id || '';
+-  $('#tx-platform').value = tx?.platform_id || state.platforms[0].id;
++  $('#tx-platform').value = tx?.platform_id || platformId || state.platforms[0].id;
+   $('#tx-amount').value = tx?.amount || '';
+   $('#tx-date').value = tx?.date || new Date().toISOString().slice(0, 10);
+   $('#tx-note').value = tx?.note || '';
+@@ -680,8 +699,11 @@ $('#tx-form').addEventListener('submit', async (e) => {
+       if (error) throw error;
+       toast(`${currentTxType === 'deposit' ? 'Deposit' : 'Withdrawal'} added`, 'success');
+     }
++    const back = state.txReturnPlatformId;
++    state.txReturnPlatformId = null;
+     closeModal('modal-tx');
+     await loadAllData();
++    if (back) openPlatformHistory(back);
+   } catch (err) {
+     errorEl.textContent = err.message || 'Could not save transaction.';
+   } finally {
+diff --git a/index.html b/index.html
+index e2476f4..c42269e 100644
+--- a/index.html
++++ b/index.html
+@@ -84,10 +84,6 @@
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+         Goals
+       </button>
+-      <button class="nav__item" data-view="transactions">
+-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+-        Transactions
+-      </button>
+     </nav>
+ 
+     <div class="sidebar__footer">
+@@ -268,37 +264,6 @@
+       </div>
+     </section>
+ 
+-    <!-- ===================== Transactions ===================== -->
+-    <section class="view" id="view-transactions">
+-      <div class="page-head">
+-        <div><h2>Transactions</h2><p>Every deposit and withdrawal you've logged.</p></div>
+-        <button class="btn btn-primary" id="add-tx-btn">
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+-          Add transaction
+-        </button>
+-      </div>
+-      <div class="toolbar">
+-        <select class="select" id="tx-filter-platform"><option value="">All platforms</option></select>
+-        <select class="select" id="tx-filter-type">
+-          <option value="">All types</option>
+-          <option value="deposit">Deposits</option>
+-          <option value="withdrawal">Withdrawals</option>
+-        </select>
+-      </div>
+-      <div class="table-card">
+-        <table class="tx-table">
+-          <thead>
+-            <tr><th>Platform</th><th>Type</th><th>Note</th><th>Date</th><th style="text-align:right">Amount</th><th></th></tr>
+-          </thead>
+-          <tbody id="tx-table-body"></tbody>
+-        </table>
+-        <div class="empty-state" id="tx-empty" style="display:none;">
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+-          <p>No transactions yet. Add your first deposit to get started.</p>
+-        </div>
+-      </div>
+-    </section>
+-
+   </main>
+ 
+   <!-- Mobile bottom nav -->
+@@ -311,10 +276,6 @@
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+       Goals
+     </button>
+-    <button data-view="transactions">
+-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+-      History
+-    </button>
+   </nav>
+ </div>
+ 
+@@ -406,6 +367,25 @@
+   </div>
+ </div>
+ 
++<!-- ============================================================ -->
++<!-- Modal: Platform transaction history                            -->
++<!-- ============================================================ -->
++<div class="modal-overlay" id="modal-platform-history">
++  <div class="modal">
++    <div class="modal__head">
++      <h3 id="platform-history-title">Transactions</h3>
++      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
++    </div>
++    <div class="modal__body">
++      <p class="goal-modal-hint" id="platform-history-hint"></p>
++      <div class="tx-list goal-history" id="platform-history-list"></div>
++      <div class="modal__footer">
++        <button type="button" class="btn btn-primary" id="platform-history-add">Add transaction</button>
++      </div>
++    </div>
++  </div>
++</div>
++
+ <!-- ============================================================ -->
+ <!-- Modal: Add/Edit Goal                                           -->
+ <!-- ============================================================ -->
+diff --git a/style.css b/style.css
+index 689b012..e0fba76 100644
+--- a/style.css
++++ b/style.css
+@@ -688,3 +688,7 @@ footer span {
+ .panel-grid[hidden] { display: none; }
+ 
+ .stat-grid--2 { grid-template-columns: repeat(2, 1fr); }
++
++/* Platform card: Add transaction on its own row, History + Edit beneath */
++.platform-card__actions { flex-wrap: wrap; }
++.platform-card__actions .platform-card__add { flex: 1 1 100%; }
 -- 
 2.43.0
 

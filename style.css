@@ -679,3 +679,16 @@ footer span {
   .goal-card__pct { font-size: 30px; }
   .mobile-nav button { padding: 4px 6px; }
 }
+
+/* =========================================================
+   Platforms tab (now includes the former Dashboard)
+   ========================================================= */
+.section-title { font-size: 17px; font-weight: 600; margin: 8px 0 14px; }
+#view-platforms .platform-grid { margin-bottom: 26px; }
+.panel-grid[hidden] { display: none; }
+
+.stat-grid--2 { grid-template-columns: repeat(2, 1fr); }
+
+/* Platform card: Add transaction on its own row, History + Edit beneath */
+.platform-card__actions { flex-wrap: wrap; }
+.platform-card__actions .platform-card__add { flex: 1 1 100%; }
