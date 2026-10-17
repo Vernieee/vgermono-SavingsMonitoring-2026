@@ -404,6 +404,29 @@ function escapeHtml(str) {
 /* ---------------------------------------------------------
    9. PLATFORMS
    --------------------------------------------------------- */
+function filterCards(query, cards, searchableContent, emptyState) {
+  const term = query.trim().toLocaleLowerCase();
+  let visible = 0;
+  cards.forEach(card => {
+    const text = searchableContent(card).toLocaleLowerCase();
+    card.hidden = Boolean(term) && !text.includes(term);
+    if (!card.hidden) visible += 1;
+  });
+  emptyState.hidden = !term || visible > 0;
+  return visible;
+}
+
+function applyPlatformSearch() {
+  filterCards(
+    $('#platform-search').value,
+    $$('.platform-card', $('#platform-grid')),
+    card => `${$('.platform-card__name', card).textContent} ${$('.platform-card__type', card).textContent}`,
+    $('#platform-search-empty')
+  );
+}
+
+$('#platform-search').addEventListener('input', applyPlatformSearch);
+
 function renderPlatforms() {
   const grid = $('#platform-grid');
   const total = state.platforms.reduce((sum, p) => sum + p.balance, 0);
@@ -442,6 +465,7 @@ function renderPlatforms() {
   }));
   $$('[data-action="history"]', grid).forEach(b => b.addEventListener('click', () => openPlatformHistory(b.dataset.id)));
   $$('[data-action="edit"]', grid).forEach(b => b.addEventListener('click', () => openPlatformModal(platformById(b.dataset.id))));
+  applyPlatformSearch();
 }
 
 $('#add-platform-btn').addEventListener('click', () => openPlatformModal());
@@ -846,6 +870,8 @@ function renderGoals() {
   // Empty state vs grids
   const showEmpty = state.goalsReady && goals.length === 0;
   $('#goal-empty').hidden = !showEmpty;
+  $('#goal-search-control').hidden = !state.goalsReady || showEmpty;
+  if (showEmpty || !state.goalsReady) $('#goal-search').value = '';
   const grid = $('#goal-grid');
   grid.hidden = !state.goalsReady || showEmpty;
 
@@ -857,8 +883,24 @@ function renderGoals() {
 
   $('#goal-completed-wrap').hidden = completed.length === 0;
   $('#goal-completed-grid').innerHTML = completed.map(goalCardHtml).join('');
+  applyGoalSearch();
   renderGoalCharts();
 }
+
+function applyGoalSearch() {
+  const query = $('#goal-search').value;
+  const searchableContent = card => `${$('.goal-card__name', card).textContent} ${$('.goal-card__desc', card)?.textContent || ''}`;
+  const activeVisible = filterCards(
+    query, $$('.goal-card', $('#goal-grid')), searchableContent, $('#goal-search-empty')
+  );
+  const completedVisible = filterCards(
+    query, $$('.goal-card', $('#goal-completed-grid')), searchableContent, $('#goal-search-empty')
+  );
+  $('#goal-completed-wrap').hidden = completedVisible === 0;
+  $('#goal-search-empty').hidden = !query.trim() || activeVisible + completedVisible > 0;
+}
+
+$('#goal-search').addEventListener('input', applyGoalSearch);
 
 let goalBarChart, goalDistChart;
 

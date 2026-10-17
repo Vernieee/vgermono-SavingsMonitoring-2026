@@ -78,7 +78,7 @@
     <nav class="nav">
       <button class="nav__item is-active" data-view="platforms">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
-        Platforms
+        Savings
       </button>
       <button class="nav__item" data-view="goals">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
@@ -124,6 +124,7 @@
           Add platform
         </button>
       </div>
+      <div class="overview-grid">
       <div class="stat-grid stat-grid--2">
         <div class="stat-card">
           <div class="stat-card__top">
@@ -169,9 +170,15 @@
           <div class="legend" id="dist-legend"></div>
         </div>
       </div>
+      </div>
 
       <h3 class="section-title">Your platforms</h3>
+      <label class="card-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input class="input" id="platform-search" type="search" placeholder="Search platforms..." aria-label="Search platforms">
+      </label>
       <div class="platform-grid" id="platform-grid"></div>
+      <p class="search-empty" id="platform-search-empty" hidden>No platforms match your search.</p>
 
     </section>
 
@@ -256,6 +263,11 @@
         <button class="btn btn-primary" id="goal-empty-add" type="button">Create your first goal</button>
       </div>
 
+      <label class="card-search goal-search" id="goal-search-control">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input class="input" id="goal-search" type="search" placeholder="Search goals..." aria-label="Search goals">
+      </label>
+      <p class="search-empty" id="goal-search-empty" hidden>No goals match your search.</p>
       <div class="goal-grid" id="goal-grid"></div>
 
       <div id="goal-completed-wrap" hidden>
@@ -270,7 +282,7 @@
   <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
     <button data-view="platforms" class="is-active">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
-      Platforms
+      Savings
     </button>
     <button data-view="goals">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
