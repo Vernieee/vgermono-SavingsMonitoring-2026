@@ -19,6 +19,9 @@ const state = {
   user: null,
   platforms: [],      // [{ id, name, type, logo_url, balance }]
   transactions: [],   // [{ id, platform_id, type, amount, date, note }]
+  goals: [],          // [{ id, name, description, target_amount, target_date, status, completed_at, saved }]
+  contributions: [],  // [{ id, goal_id, amount, date, note }]
+  goalsReady: true,   // false when the goals tables don't exist yet
   pendingLogoFile: null,
   pendingLogoRemoved: false,
 };
@@ -197,10 +200,12 @@ $('#confirm-ok').addEventListener('click', async () => {
    7. DATA LOADING
    --------------------------------------------------------- */
 async function loadAllData() {
-  await Promise.all([loadPlatforms(), loadTransactions()]);
+  await Promise.all([loadPlatforms(), loadTransactions(), loadGoals()]);
+  await loadContributions();
   renderDashboard();
   renderPlatforms();
   renderTransactions();
+  renderGoals();
 }
 
 async function loadPlatforms() {
@@ -728,7 +733,336 @@ async function deleteTransaction(id) {
 }
 
 /* ---------------------------------------------------------
-   11. INIT
+   11. SAVINGS GOALS
+   Goals are an allocation layer: contributions never change
+   platform balances or create transactions.
+   --------------------------------------------------------- */
+function pesoGoal(amount) {
+  const n = Number(amount) || 0;
+  const whole = Math.abs(n - Math.round(n)) < 0.005;
+  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
+}
+
+// Local-date string (toISOString would give yesterday's date early in the morning in UTC+8).
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function goalById(id) { return state.goals.find(g => g.id === id); }
+function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
+
+async function loadGoals() {
+  const { data, error } = await sb.from('goal_progress').select('*').order('created_at', { ascending: true });
+  if (error) {
+    // Most likely supabase-goals.sql hasn't been run yet. Don't break the rest of the app.
+    console.error('Could not load goals', error);
+    state.goalsReady = false;
+    state.goals = [];
+    return;
+  }
+  state.goalsReady = true;
+  state.goals = data.map(g => ({ ...g, id: g.goal_id, target_amount: Number(g.target_amount), saved: Number(g.saved) }));
+}
+
+async function loadContributions() {
+  if (!state.goalsReady) { state.contributions = []; return; }
+  const { data, error } = await sb.from('goal_contributions').select('*')
+    .order('date', { ascending: false }).order('created_at', { ascending: false });
+  if (error) { toast('Could not load goal contributions', 'error'); console.error(error); return; }
+  state.contributions = data.map(c => ({ ...c, amount: Number(c.amount) }));
+}
+
+function goalPercent(g) {
+  if (g.saved >= g.target_amount) return 100;
+  return Math.max(0, Math.floor((g.saved / g.target_amount) * 100));
+}
+
+function goalDueInfo(g) {
+  if (g.status === 'completed') {
+    return { text: g.completed_at ? `Completed ${formatDate(g.completed_at.slice(0, 10))}` : 'Completed', tone: '' };
+  }
+  if (!g.target_date) return { text: 'No target date', tone: '' };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(g.target_date + 'T00:00:00') - today) / 86400000);
+  if (g.saved >= g.target_amount) return { text: `Target reached · due ${formatDate(g.target_date)}`, tone: '' };
+  if (days < 0) return { text: `Overdue by ${plural(-days, 'day')}`, tone: 'is-late' };
+  if (days === 0) return { text: 'Due today', tone: 'is-late' };
+  return { text: `${formatDate(g.target_date)} · ${plural(days, 'day')} left`, tone: '' };
+}
+
+function goalCardHtml(g) {
+  const pct = goalPercent(g);
+  const done = g.status === 'completed';
+  const reached = g.saved >= g.target_amount;
+  const remaining = Math.max(g.target_amount - g.saved, 0);
+  const due = goalDueInfo(g);
+  const badge = done
+    ? '<span class="badge badge-goal-done">Completed</span>'
+    : reached ? '<span class="badge badge-goal-reached">Target reached</span>' : '';
+  const remainingText = remaining > 0 ? `${pesoGoal(remaining)} remaining` : (g.saved > g.target_amount ? `${pesoGoal(g.saved - g.target_amount)} over target` : 'Fully funded');
+
+  let primaryBtn;
+  if (done) primaryBtn = `<button class="btn btn-soft btn-sm" data-action="reopen" data-id="${g.id}">Reopen</button>`;
+  else if (reached) primaryBtn = `<button class="btn btn-primary btn-sm" data-action="complete" data-id="${g.id}">Mark completed</button>`;
+  else primaryBtn = `<button class="btn btn-primary btn-sm" data-action="add" data-id="${g.id}">Add money</button>`;
+
+  return `
+    <article class="goal-card ${done ? 'is-completed' : ''}">
+      <div class="goal-card__head">
+        <div class="goal-card__title">
+          <h3 class="goal-card__name">${escapeHtml(g.name)}</h3>
+          ${g.description ? `<p class="goal-card__desc">${escapeHtml(g.description)}</p>` : ''}
+        </div>
+        ${badge}
+      </div>
+      <div class="goal-card__figures">
+        <div class="goal-card__amounts num"><strong>${pesoGoal(g.saved)}</strong> of ${pesoGoal(g.target_amount)}</div>
+        <div class="goal-card__pct num">${pct}%</div>
+      </div>
+      <div class="goal-bar" role="progressbar" aria-label="${escapeHtml(g.name)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+        <span style="width:${pct}%"></span>
+      </div>
+      <div class="goal-card__meta">
+        <span class="num">${remainingText}</span>
+        <span class="goal-card__due ${due.tone}">${escapeHtml(due.text)}</span>
+      </div>
+      <div class="goal-card__actions">
+        ${primaryBtn}
+        ${!done && reached ? `<button class="btn btn-ghost btn-sm" data-action="add" data-id="${g.id}">Add money</button>` : ''}
+        <button class="btn btn-ghost btn-sm" data-action="history" data-id="${g.id}">History</button>
+        <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${g.id}">Edit</button>
+      </div>
+    </article>`;
+}
+
+function renderGoals() {
+  const goals = state.goals;
+  const active = goals.filter(g => g.status !== 'completed');
+  const completed = goals.filter(g => g.status === 'completed');
+
+  // Summary
+  const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
+  const totalSaved = goals.reduce((s, g) => s + g.saved, 0);
+  $('#goal-stat-target').textContent = pesoGoal(totalTarget);
+  $('#goal-stat-target-sub').textContent = goals.length ? `Across ${plural(goals.length, 'goal')}` : 'Across all goals';
+  $('#goal-stat-saved').textContent = pesoGoal(totalSaved);
+  $('#goal-stat-saved-sub').textContent = totalTarget > 0
+    ? `${Math.min(100, Math.floor((totalSaved / totalTarget) * 100))}% of your total target`
+    : 'Set aside for goals';
+  $('#goal-stat-active').textContent = active.length;
+  $('#goal-stat-done').textContent = completed.length;
+
+  // Setup notice (tables missing)
+  $('#goal-setup-note').hidden = state.goalsReady;
+  $('#add-goal-btn').disabled = !state.goalsReady;
+
+  // Empty state vs grids
+  const showEmpty = state.goalsReady && goals.length === 0;
+  $('#goal-empty').hidden = !showEmpty;
+  const grid = $('#goal-grid');
+  grid.hidden = !state.goalsReady || showEmpty;
+
+  grid.innerHTML = active.map(goalCardHtml).join('') + `
+    <button class="add-tile goal-add-tile" id="add-goal-tile" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      <span>New goal</span>
+    </button>`;
+
+  $('#goal-completed-wrap').hidden = completed.length === 0;
+  $('#goal-completed-grid').innerHTML = completed.map(goalCardHtml).join('');
+}
+
+// One delegated listener covers both grids and the dynamic add tile.
+$('#view-goals').addEventListener('click', (e) => {
+  if (e.target.closest('#add-goal-tile')) { openGoalModal(); return; }
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const goal = goalById(btn.dataset.id);
+  if (!goal) return;
+  switch (btn.dataset.action) {
+    case 'add': openContributionModal(goal); break;
+    case 'history': openGoalHistory(goal.id); break;
+    case 'edit': openGoalModal(goal); break;
+    case 'complete': setGoalStatus(goal, 'completed'); break;
+    case 'reopen': setGoalStatus(goal, 'active'); break;
+  }
+});
+$('#add-goal-btn').addEventListener('click', () => openGoalModal());
+$('#goal-empty-add').addEventListener('click', () => openGoalModal());
+
+/* ---- Create / edit / delete ---- */
+function openGoalModal(goal = null) {
+  $('#goal-form').reset();
+  $('#goal-error').textContent = '';
+  $('#goal-modal-title').textContent = goal ? 'Edit goal' : 'New goal';
+  $('#goal-id').value = goal?.id || '';
+  $('#goal-name').value = goal?.name || '';
+  $('#goal-target').value = goal?.target_amount || '';
+  $('#goal-date').value = goal?.target_date || '';
+  $('#goal-desc').value = goal?.description || '';
+
+  let delBtn = $('#goal-delete-btn');
+  if (goal) {
+    if (!delBtn) {
+      delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.id = 'goal-delete-btn';
+      delBtn.className = 'btn btn-danger';
+      delBtn.textContent = 'Delete';
+      $('#goal-form .modal__footer').prepend(delBtn);
+    }
+    delBtn.onclick = () => {
+      closeModal('modal-goal');
+      askConfirm('Delete goal?', `This removes "${goal.name}" and its contribution history. Your platform balances aren't affected. This can't be undone.`, () => deleteGoal(goal.id));
+    };
+  } else if (delBtn) {
+    delBtn.remove();
+  }
+  openModal('modal-goal');
+  $('#goal-name').focus();
+}
+
+$('#goal-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = $('#goal-id').value;
+  const payload = {
+    name: $('#goal-name').value.trim(),
+    target_amount: parseFloat($('#goal-target').value),
+    target_date: $('#goal-date').value || null,
+    description: $('#goal-desc').value.trim() || null,
+  };
+  const errorEl = $('#goal-error');
+  if (!payload.name) { errorEl.textContent = 'Please enter a goal name.'; return; }
+  if (!payload.target_amount || payload.target_amount <= 0) { errorEl.textContent = 'Please enter a target amount greater than zero.'; return; }
+
+  const submitBtn = $('#goal-submit');
+  submitBtn.disabled = true;
+  try {
+    if (id) {
+      const { error } = await sb.from('goals').update(payload).eq('id', id);
+      if (error) throw error;
+      toast('Goal updated', 'success');
+    } else {
+      const { error } = await sb.from('goals').insert({ ...payload, user_id: state.user.id });
+      if (error) throw error;
+      toast('Goal created', 'success');
+    }
+    closeModal('modal-goal');
+    await loadAllData();
+  } catch (err) {
+    errorEl.textContent = err.message || 'Could not save goal.';
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+async function deleteGoal(id) {
+  const { error } = await sb.from('goals').delete().eq('id', id);
+  if (error) { toast('Could not delete goal', 'error'); return; }
+  toast('Goal deleted', 'success');
+  await loadAllData();
+}
+
+async function setGoalStatus(goal, status) {
+  const completing = status === 'completed';
+  const { error } = await sb.from('goals')
+    .update({ status, completed_at: completing ? new Date().toISOString() : null })
+    .eq('id', goal.id);
+  if (error) { toast('Could not update goal', 'error'); console.error(error); return; }
+  toast(completing ? `"${goal.name}" completed` : `"${goal.name}" reopened`, 'success');
+  await loadAllData();
+}
+
+/* ---- Add money ---- */
+function openContributionModal(goal) {
+  $('#contribution-form').reset();
+  $('#contribution-error').textContent = '';
+  $('#contribution-goal-id').value = goal.id;
+  $('#contribution-modal-title').textContent = `Add money to ${goal.name}`;
+  const remaining = Math.max(goal.target_amount - goal.saved, 0);
+  $('#contribution-hint').textContent = remaining > 0
+    ? `${pesoGoal(goal.saved)} of ${pesoGoal(goal.target_amount)} saved · ${pesoGoal(remaining)} to go`
+    : `${pesoGoal(goal.saved)} saved · target already reached`;
+  $('#contribution-date').value = todayStr();
+  openModal('modal-contribution');
+  $('#contribution-amount').focus();
+}
+
+$('#contribution-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const goalId = $('#contribution-goal-id').value;
+  const goal = goalById(goalId);
+  const payload = {
+    goal_id: goalId,
+    amount: parseFloat($('#contribution-amount').value),
+    date: $('#contribution-date').value,
+    note: $('#contribution-note').value.trim() || null,
+  };
+  const errorEl = $('#contribution-error');
+  if (!goal || !payload.amount || payload.amount <= 0 || !payload.date) {
+    errorEl.textContent = 'Please enter a positive amount and a date.';
+    return;
+  }
+
+  const submitBtn = $('#contribution-submit');
+  submitBtn.disabled = true;
+  try {
+    const { error } = await sb.from('goal_contributions').insert({ ...payload, user_id: state.user.id });
+    if (error) throw error;
+    const justReached = goal.saved < goal.target_amount && goal.saved + payload.amount >= goal.target_amount;
+    closeModal('modal-contribution');
+    toast(justReached && goal.status !== 'completed'
+      ? `Target reached for "${goal.name}"! Mark it completed when you're ready.`
+      : `Added ${pesoGoal(payload.amount)} to "${goal.name}"`, 'success');
+    await loadAllData();
+  } catch (err) {
+    errorEl.textContent = err.message || 'Could not add money.';
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+/* ---- Contribution history ---- */
+function openGoalHistory(goalId) {
+  const goal = goalById(goalId);
+  if (!goal) return;
+  $('#goal-history-title').textContent = `${goal.name} · contributions`;
+  const rows = state.contributions.filter(c => c.goal_id === goalId);
+  $('#goal-history-list').innerHTML = rows.length
+    ? rows.map(c => `
+      <div class="tx-row">
+        <div class="tx-row__body">
+          <div class="tx-row__title">${escapeHtml(c.note || 'Contribution')}</div>
+          <div class="tx-row__sub">${formatDate(c.date)}</div>
+        </div>
+        <div class="tx-row__amt deposit num">+${pesoGoal(c.amount)}</div>
+        <button class="icon-btn" type="button" data-contribution="${c.id}" title="Delete contribution" aria-label="Delete contribution">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
+        </button>
+      </div>`).join('')
+    : `<div class="empty-state"><p>No money added yet. Use "Add money" to log your first contribution.</p></div>`;
+  $('#goal-history-list').dataset.goalId = goalId;
+  openModal('modal-goal-history');
+}
+
+$('#goal-history-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-contribution]');
+  if (!btn) return;
+  const goalId = $('#goal-history-list').dataset.goalId;
+  const contributionId = btn.dataset.contribution;
+  closeModal('modal-goal-history');
+  askConfirm('Delete contribution?', "This lowers the goal's saved amount. Your platform balances aren't affected.", async () => {
+    const { error } = await sb.from('goal_contributions').delete().eq('id', contributionId);
+    if (error) { toast('Could not delete contribution', 'error'); console.error(error); return; }
+    toast('Contribution deleted', 'success');
+    await loadAllData();
+    openGoalHistory(goalId);
+  });
+});
+
+/* ---------------------------------------------------------
+   12. INIT
    --------------------------------------------------------- */
 setupThemeToggle();
 

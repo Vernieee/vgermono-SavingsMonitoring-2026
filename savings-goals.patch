@@ -1,0 +1,762 @@
+From c531f226577ff2f007daf6da57c442cec09960f2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 17 Oct 2026 04:31:33 +0000
+Subject: [PATCH] Add Savings Goals: goals, contributions, progress, dashboard
+
+---
+ app.js             | 338 ++++++++++++++++++++++++++++++++++++++++++++-
+ index.html         | 161 +++++++++++++++++++++
+ style.css          |  76 ++++++++++
+ supabase-goals.sql |  97 +++++++++++++
+ 4 files changed, 670 insertions(+), 2 deletions(-)
+ create mode 100644 supabase-goals.sql
+
+diff --git a/app.js b/app.js
+index a57a339..78165a2 100644
+--- a/app.js
++++ b/app.js
+@@ -19,6 +19,9 @@ const state = {
+   user: null,
+   platforms: [],      // [{ id, name, type, logo_url, balance }]
+   transactions: [],   // [{ id, platform_id, type, amount, date, note }]
++  goals: [],          // [{ id, name, description, target_amount, target_date, status, completed_at, saved }]
++  contributions: [],  // [{ id, goal_id, amount, date, note }]
++  goalsReady: true,   // false when the goals tables don't exist yet
+   pendingLogoFile: null,
+   pendingLogoRemoved: false,
+ };
+@@ -197,10 +200,12 @@ $('#confirm-ok').addEventListener('click', async () => {
+    7. DATA LOADING
+    --------------------------------------------------------- */
+ async function loadAllData() {
+-  await Promise.all([loadPlatforms(), loadTransactions()]);
++  await Promise.all([loadPlatforms(), loadTransactions(), loadGoals()]);
++  await loadContributions();
+   renderDashboard();
+   renderPlatforms();
+   renderTransactions();
++  renderGoals();
+ }
+ 
+ async function loadPlatforms() {
+@@ -728,7 +733,336 @@ async function deleteTransaction(id) {
+ }
+ 
+ /* ---------------------------------------------------------
+-   11. INIT
++   11. SAVINGS GOALS
++   Goals are an allocation layer: contributions never change
++   platform balances or create transactions.
++   --------------------------------------------------------- */
++function pesoGoal(amount) {
++  const n = Number(amount) || 0;
++  const whole = Math.abs(n - Math.round(n)) < 0.005;
++  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
++}
++
++// Local-date string (toISOString would give yesterday's date early in the morning in UTC+8).
++function todayStr() {
++  const d = new Date();
++  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
++}
++
++function goalById(id) { return state.goals.find(g => g.id === id); }
++function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
++
++async function loadGoals() {
++  const { data, error } = await sb.from('goal_progress').select('*').order('created_at', { ascending: true });
++  if (error) {
++    // Most likely supabase-goals.sql hasn't been run yet. Don't break the rest of the app.
++    console.error('Could not load goals', error);
++    state.goalsReady = false;
++    state.goals = [];
++    return;
++  }
++  state.goalsReady = true;
++  state.goals = data.map(g => ({ ...g, id: g.goal_id, target_amount: Number(g.target_amount), saved: Number(g.saved) }));
++}
++
++async function loadContributions() {
++  if (!state.goalsReady) { state.contributions = []; return; }
++  const { data, error } = await sb.from('goal_contributions').select('*')
++    .order('date', { ascending: false }).order('created_at', { ascending: false });
++  if (error) { toast('Could not load goal contributions', 'error'); console.error(error); return; }
++  state.contributions = data.map(c => ({ ...c, amount: Number(c.amount) }));
++}
++
++function goalPercent(g) {
++  if (g.saved >= g.target_amount) return 100;
++  return Math.max(0, Math.floor((g.saved / g.target_amount) * 100));
++}
++
++function goalDueInfo(g) {
++  if (g.status === 'completed') {
++    return { text: g.completed_at ? `Completed ${formatDate(g.completed_at.slice(0, 10))}` : 'Completed', tone: '' };
++  }
++  if (!g.target_date) return { text: 'No target date', tone: '' };
++  const today = new Date(); today.setHours(0, 0, 0, 0);
++  const days = Math.round((new Date(g.target_date + 'T00:00:00') - today) / 86400000);
++  if (g.saved >= g.target_amount) return { text: `Target reached · due ${formatDate(g.target_date)}`, tone: '' };
++  if (days < 0) return { text: `Overdue by ${plural(-days, 'day')}`, tone: 'is-late' };
++  if (days === 0) return { text: 'Due today', tone: 'is-late' };
++  return { text: `${formatDate(g.target_date)} · ${plural(days, 'day')} left`, tone: '' };
++}
++
++function goalCardHtml(g) {
++  const pct = goalPercent(g);
++  const done = g.status === 'completed';
++  const reached = g.saved >= g.target_amount;
++  const remaining = Math.max(g.target_amount - g.saved, 0);
++  const due = goalDueInfo(g);
++  const badge = done
++    ? '<span class="badge badge-goal-done">Completed</span>'
++    : reached ? '<span class="badge badge-goal-reached">Target reached</span>' : '';
++  const remainingText = remaining > 0 ? `${pesoGoal(remaining)} remaining` : (g.saved > g.target_amount ? `${pesoGoal(g.saved - g.target_amount)} over target` : 'Fully funded');
++
++  let primaryBtn;
++  if (done) primaryBtn = `<button class="btn btn-soft btn-sm" data-action="reopen" data-id="${g.id}">Reopen</button>`;
++  else if (reached) primaryBtn = `<button class="btn btn-primary btn-sm" data-action="complete" data-id="${g.id}">Mark completed</button>`;
++  else primaryBtn = `<button class="btn btn-primary btn-sm" data-action="add" data-id="${g.id}">Add money</button>`;
++
++  return `
++    <article class="goal-card ${done ? 'is-completed' : ''}">
++      <div class="goal-card__head">
++        <div class="goal-card__title">
++          <h3 class="goal-card__name">${escapeHtml(g.name)}</h3>
++          ${g.description ? `<p class="goal-card__desc">${escapeHtml(g.description)}</p>` : ''}
++        </div>
++        ${badge}
++      </div>
++      <div class="goal-card__figures">
++        <div class="goal-card__amounts num"><strong>${pesoGoal(g.saved)}</strong> of ${pesoGoal(g.target_amount)}</div>
++        <div class="goal-card__pct num">${pct}%</div>
++      </div>
++      <div class="goal-bar" role="progressbar" aria-label="${escapeHtml(g.name)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
++        <span style="width:${pct}%"></span>
++      </div>
++      <div class="goal-card__meta">
++        <span class="num">${remainingText}</span>
++        <span class="goal-card__due ${due.tone}">${escapeHtml(due.text)}</span>
++      </div>
++      <div class="goal-card__actions">
++        ${primaryBtn}
++        ${!done && reached ? `<button class="btn btn-ghost btn-sm" data-action="add" data-id="${g.id}">Add money</button>` : ''}
++        <button class="btn btn-ghost btn-sm" data-action="history" data-id="${g.id}">History</button>
++        <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${g.id}">Edit</button>
++      </div>
++    </article>`;
++}
++
++function renderGoals() {
++  const goals = state.goals;
++  const active = goals.filter(g => g.status !== 'completed');
++  const completed = goals.filter(g => g.status === 'completed');
++
++  // Summary
++  const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
++  const totalSaved = goals.reduce((s, g) => s + g.saved, 0);
++  $('#goal-stat-target').textContent = pesoGoal(totalTarget);
++  $('#goal-stat-target-sub').textContent = goals.length ? `Across ${plural(goals.length, 'goal')}` : 'Across all goals';
++  $('#goal-stat-saved').textContent = pesoGoal(totalSaved);
++  $('#goal-stat-saved-sub').textContent = totalTarget > 0
++    ? `${Math.min(100, Math.floor((totalSaved / totalTarget) * 100))}% of your total target`
++    : 'Set aside for goals';
++  $('#goal-stat-active').textContent = active.length;
++  $('#goal-stat-done').textContent = completed.length;
++
++  // Setup notice (tables missing)
++  $('#goal-setup-note').hidden = state.goalsReady;
++  $('#add-goal-btn').disabled = !state.goalsReady;
++
++  // Empty state vs grids
++  const showEmpty = state.goalsReady && goals.length === 0;
++  $('#goal-empty').hidden = !showEmpty;
++  const grid = $('#goal-grid');
++  grid.hidden = !state.goalsReady || showEmpty;
++
++  grid.innerHTML = active.map(goalCardHtml).join('') + `
++    <button class="add-tile goal-add-tile" id="add-goal-tile" type="button">
++      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
++      <span>New goal</span>
++    </button>`;
++
++  $('#goal-completed-wrap').hidden = completed.length === 0;
++  $('#goal-completed-grid').innerHTML = completed.map(goalCardHtml).join('');
++}
++
++// One delegated listener covers both grids and the dynamic add tile.
++$('#view-goals').addEventListener('click', (e) => {
++  if (e.target.closest('#add-goal-tile')) { openGoalModal(); return; }
++  const btn = e.target.closest('[data-action]');
++  if (!btn) return;
++  const goal = goalById(btn.dataset.id);
++  if (!goal) return;
++  switch (btn.dataset.action) {
++    case 'add': openContributionModal(goal); break;
++    case 'history': openGoalHistory(goal.id); break;
++    case 'edit': openGoalModal(goal); break;
++    case 'complete': setGoalStatus(goal, 'completed'); break;
++    case 'reopen': setGoalStatus(goal, 'active'); break;
++  }
++});
++$('#add-goal-btn').addEventListener('click', () => openGoalModal());
++$('#goal-empty-add').addEventListener('click', () => openGoalModal());
++
++/* ---- Create / edit / delete ---- */
++function openGoalModal(goal = null) {
++  $('#goal-form').reset();
++  $('#goal-error').textContent = '';
++  $('#goal-modal-title').textContent = goal ? 'Edit goal' : 'New goal';
++  $('#goal-id').value = goal?.id || '';
++  $('#goal-name').value = goal?.name || '';
++  $('#goal-target').value = goal?.target_amount || '';
++  $('#goal-date').value = goal?.target_date || '';
++  $('#goal-desc').value = goal?.description || '';
++
++  let delBtn = $('#goal-delete-btn');
++  if (goal) {
++    if (!delBtn) {
++      delBtn = document.createElement('button');
++      delBtn.type = 'button';
++      delBtn.id = 'goal-delete-btn';
++      delBtn.className = 'btn btn-danger';
++      delBtn.textContent = 'Delete';
++      $('#goal-form .modal__footer').prepend(delBtn);
++    }
++    delBtn.onclick = () => {
++      closeModal('modal-goal');
++      askConfirm('Delete goal?', `This removes "${goal.name}" and its contribution history. Your platform balances aren't affected. This can't be undone.`, () => deleteGoal(goal.id));
++    };
++  } else if (delBtn) {
++    delBtn.remove();
++  }
++  openModal('modal-goal');
++  $('#goal-name').focus();
++}
++
++$('#goal-form').addEventListener('submit', async (e) => {
++  e.preventDefault();
++  const id = $('#goal-id').value;
++  const payload = {
++    name: $('#goal-name').value.trim(),
++    target_amount: parseFloat($('#goal-target').value),
++    target_date: $('#goal-date').value || null,
++    description: $('#goal-desc').value.trim() || null,
++  };
++  const errorEl = $('#goal-error');
++  if (!payload.name) { errorEl.textContent = 'Please enter a goal name.'; return; }
++  if (!payload.target_amount || payload.target_amount <= 0) { errorEl.textContent = 'Please enter a target amount greater than zero.'; return; }
++
++  const submitBtn = $('#goal-submit');
++  submitBtn.disabled = true;
++  try {
++    if (id) {
++      const { error } = await sb.from('goals').update(payload).eq('id', id);
++      if (error) throw error;
++      toast('Goal updated', 'success');
++    } else {
++      const { error } = await sb.from('goals').insert({ ...payload, user_id: state.user.id });
++      if (error) throw error;
++      toast('Goal created', 'success');
++    }
++    closeModal('modal-goal');
++    await loadAllData();
++  } catch (err) {
++    errorEl.textContent = err.message || 'Could not save goal.';
++  } finally {
++    submitBtn.disabled = false;
++  }
++});
++
++async function deleteGoal(id) {
++  const { error } = await sb.from('goals').delete().eq('id', id);
++  if (error) { toast('Could not delete goal', 'error'); return; }
++  toast('Goal deleted', 'success');
++  await loadAllData();
++}
++
++async function setGoalStatus(goal, status) {
++  const completing = status === 'completed';
++  const { error } = await sb.from('goals')
++    .update({ status, completed_at: completing ? new Date().toISOString() : null })
++    .eq('id', goal.id);
++  if (error) { toast('Could not update goal', 'error'); console.error(error); return; }
++  toast(completing ? `"${goal.name}" completed` : `"${goal.name}" reopened`, 'success');
++  await loadAllData();
++}
++
++/* ---- Add money ---- */
++function openContributionModal(goal) {
++  $('#contribution-form').reset();
++  $('#contribution-error').textContent = '';
++  $('#contribution-goal-id').value = goal.id;
++  $('#contribution-modal-title').textContent = `Add money to ${goal.name}`;
++  const remaining = Math.max(goal.target_amount - goal.saved, 0);
++  $('#contribution-hint').textContent = remaining > 0
++    ? `${pesoGoal(goal.saved)} of ${pesoGoal(goal.target_amount)} saved · ${pesoGoal(remaining)} to go`
++    : `${pesoGoal(goal.saved)} saved · target already reached`;
++  $('#contribution-date').value = todayStr();
++  openModal('modal-contribution');
++  $('#contribution-amount').focus();
++}
++
++$('#contribution-form').addEventListener('submit', async (e) => {
++  e.preventDefault();
++  const goalId = $('#contribution-goal-id').value;
++  const goal = goalById(goalId);
++  const payload = {
++    goal_id: goalId,
++    amount: parseFloat($('#contribution-amount').value),
++    date: $('#contribution-date').value,
++    note: $('#contribution-note').value.trim() || null,
++  };
++  const errorEl = $('#contribution-error');
++  if (!goal || !payload.amount || payload.amount <= 0 || !payload.date) {
++    errorEl.textContent = 'Please enter a positive amount and a date.';
++    return;
++  }
++
++  const submitBtn = $('#contribution-submit');
++  submitBtn.disabled = true;
++  try {
++    const { error } = await sb.from('goal_contributions').insert({ ...payload, user_id: state.user.id });
++    if (error) throw error;
++    const justReached = goal.saved < goal.target_amount && goal.saved + payload.amount >= goal.target_amount;
++    closeModal('modal-contribution');
++    toast(justReached && goal.status !== 'completed'
++      ? `Target reached for "${goal.name}"! Mark it completed when you're ready.`
++      : `Added ${pesoGoal(payload.amount)} to "${goal.name}"`, 'success');
++    await loadAllData();
++  } catch (err) {
++    errorEl.textContent = err.message || 'Could not add money.';
++  } finally {
++    submitBtn.disabled = false;
++  }
++});
++
++/* ---- Contribution history ---- */
++function openGoalHistory(goalId) {
++  const goal = goalById(goalId);
++  if (!goal) return;
++  $('#goal-history-title').textContent = `${goal.name} · contributions`;
++  const rows = state.contributions.filter(c => c.goal_id === goalId);
++  $('#goal-history-list').innerHTML = rows.length
++    ? rows.map(c => `
++      <div class="tx-row">
++        <div class="tx-row__body">
++          <div class="tx-row__title">${escapeHtml(c.note || 'Contribution')}</div>
++          <div class="tx-row__sub">${formatDate(c.date)}</div>
++        </div>
++        <div class="tx-row__amt deposit num">+${pesoGoal(c.amount)}</div>
++        <button class="icon-btn" type="button" data-contribution="${c.id}" title="Delete contribution" aria-label="Delete contribution">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
++        </button>
++      </div>`).join('')
++    : `<div class="empty-state"><p>No money added yet. Use "Add money" to log your first contribution.</p></div>`;
++  $('#goal-history-list').dataset.goalId = goalId;
++  openModal('modal-goal-history');
++}
++
++$('#goal-history-list').addEventListener('click', (e) => {
++  const btn = e.target.closest('[data-contribution]');
++  if (!btn) return;
++  const goalId = $('#goal-history-list').dataset.goalId;
++  const contributionId = btn.dataset.contribution;
++  closeModal('modal-goal-history');
++  askConfirm('Delete contribution?', "This lowers the goal's saved amount. Your platform balances aren't affected.", async () => {
++    const { error } = await sb.from('goal_contributions').delete().eq('id', contributionId);
++    if (error) { toast('Could not delete contribution', 'error'); console.error(error); return; }
++    toast('Contribution deleted', 'success');
++    await loadAllData();
++    openGoalHistory(goalId);
++  });
++});
++
++/* ---------------------------------------------------------
++   12. INIT
+    --------------------------------------------------------- */
+ setupThemeToggle();
+ 
+diff --git a/index.html b/index.html
+index e5a74d7..7e3bf6a 100644
+--- a/index.html
++++ b/index.html
+@@ -84,6 +84,10 @@
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+         Platforms
+       </button>
++      <button class="nav__item" data-view="goals">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
++        Goals
++      </button>
+       <button class="nav__item" data-view="transactions">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+         Transactions
+@@ -202,6 +206,75 @@
+       <div class="platform-grid" id="platform-grid"></div>
+     </section>
+ 
++    <!-- ===================== Goals ===================== -->
++    <section class="view" id="view-goals">
++      <div class="page-head">
++        <div><h2>My Savings Goals</h2><p>Every peso brings you closer.</p></div>
++        <button class="btn btn-primary" id="add-goal-btn">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
++          New goal
++        </button>
++      </div>
++
++      <div class="stat-grid stat-grid--4">
++        <div class="stat-card">
++          <div class="stat-card__top">
++            <span class="stat-card__label">Total target</span>
++            <div class="stat-card__icon tone-ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></div>
++          </div>
++          <div class="stat-card__value num" id="goal-stat-target">₱0</div>
++          <div class="stat-card__sub" id="goal-stat-target-sub">Across all goals</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-card__top">
++            <span class="stat-card__label">Total saved</span>
++            <div class="stat-card__icon tone-primary">
++              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
++            </div>
++          </div>
++          <div class="stat-card__value num" id="goal-stat-saved">₱0</div>
++          <div class="stat-card__sub" id="goal-stat-saved-sub">Set aside for goals</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-card__top">
++            <span class="stat-card__label">Active goals</span>
++            <div class="stat-card__icon tone-accent">
++              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
++            </div>
++          </div>
++          <div class="stat-card__value num" id="goal-stat-active">0</div>
++          <div class="stat-card__sub">Still in progress</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-card__top">
++            <span class="stat-card__label">Completed goals</span>
++            <div class="stat-card__icon tone-primary">
++              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
++            </div>
++          </div>
++          <div class="stat-card__value num" id="goal-stat-done">0</div>
++          <div class="stat-card__sub">Targets reached</div>
++        </div>
++      </div>
++
++      <div class="goal-notice" id="goal-setup-note" hidden>
++        Goals need two new database tables. Run <strong>supabase-goals.sql</strong> in your Supabase SQL editor, then refresh this page.
++      </div>
++
++      <div class="empty-state goal-empty" id="goal-empty" hidden>
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
++        <p>No goals yet. Name something you're saving for, like a new phone, a trip, or an emergency fund.</p>
++        <button class="btn btn-primary" id="goal-empty-add" type="button">Create your first goal</button>
++      </div>
++
++      <div class="goal-grid" id="goal-grid"></div>
++
++      <div id="goal-completed-wrap" hidden>
++        <h3 class="goal-section-title">Completed</h3>
++        <div class="goal-grid" id="goal-completed-grid"></div>
++      </div>
++    </section>
++
+     <!-- ===================== Transactions ===================== -->
+     <section class="view" id="view-transactions">
+       <div class="page-head">
+@@ -245,6 +318,10 @@
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+       Platforms
+     </button>
++    <button data-view="goals">
++      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
++      Goals
++    </button>
+     <button data-view="transactions">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+       History
+@@ -340,6 +417,90 @@
+   </div>
+ </div>
+ 
++<!-- ============================================================ -->
++<!-- Modal: Add/Edit Goal                                           -->
++<!-- ============================================================ -->
++<div class="modal-overlay" id="modal-goal">
++  <div class="modal">
++    <div class="modal__head">
++      <h3 id="goal-modal-title">New goal</h3>
++      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
++    </div>
++    <form class="modal__body" id="goal-form">
++      <input type="hidden" id="goal-id">
++      <div class="field">
++        <label for="goal-name">Goal name</label>
++        <input class="input" id="goal-name" placeholder="e.g. New phone" maxlength="80" required>
++      </div>
++      <div class="field">
++        <label for="goal-target">Target amount (₱)</label>
++        <input class="input" id="goal-target" type="number" min="0.01" step="0.01" placeholder="25000" required>
++      </div>
++      <div class="field">
++        <label for="goal-date">Target date (optional)</label>
++        <input class="input" id="goal-date" type="date">
++      </div>
++      <div class="field">
++        <label for="goal-desc">Description (optional)</label>
++        <textarea class="input" id="goal-desc" rows="2" maxlength="300" placeholder="What is this for?"></textarea>
++      </div>
++      <p class="field-error" id="goal-error"></p>
++      <div class="modal__footer">
++        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
++        <button type="submit" class="btn btn-primary" id="goal-submit">Save goal</button>
++      </div>
++    </form>
++  </div>
++</div>
++
++<!-- ============================================================ -->
++<!-- Modal: Add money to a goal                                     -->
++<!-- ============================================================ -->
++<div class="modal-overlay" id="modal-contribution">
++  <div class="modal">
++    <div class="modal__head">
++      <h3 id="contribution-modal-title">Add money</h3>
++      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
++    </div>
++    <form class="modal__body" id="contribution-form">
++      <input type="hidden" id="contribution-goal-id">
++      <p class="goal-modal-hint" id="contribution-hint"></p>
++      <div class="field">
++        <label for="contribution-amount">Amount (₱)</label>
++        <input class="input" id="contribution-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
++      </div>
++      <div class="field">
++        <label for="contribution-date">Date</label>
++        <input class="input" id="contribution-date" type="date" required>
++      </div>
++      <div class="field">
++        <label for="contribution-note">Note (optional)</label>
++        <input class="input" id="contribution-note" placeholder="e.g. Bonus">
++      </div>
++      <p class="field-error" id="contribution-error"></p>
++      <div class="modal__footer">
++        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
++        <button type="submit" class="btn btn-primary" id="contribution-submit">Add money</button>
++      </div>
++    </form>
++  </div>
++</div>
++
++<!-- ============================================================ -->
++<!-- Modal: Goal contribution history                               -->
++<!-- ============================================================ -->
++<div class="modal-overlay" id="modal-goal-history">
++  <div class="modal">
++    <div class="modal__head">
++      <h3 id="goal-history-title">Contributions</h3>
++      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
++    </div>
++    <div class="modal__body">
++      <div class="tx-list goal-history" id="goal-history-list"></div>
++    </div>
++  </div>
++</div>
++
+ <!-- ============================================================ -->
+ <!-- Modal: Confirm delete                                          -->
+ <!-- ============================================================ -->
+diff --git a/style.css b/style.css
+index 7fcbaa4..a92209c 100644
+--- a/style.css
++++ b/style.css
+@@ -603,3 +603,79 @@ footer span {
+   color: var(--primary);
+   font-weight: 600;
+ }
++
++/* =========================================================
++   Savings goals
++   ========================================================= */
++.stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
++
++.goal-section-title {
++  font-size: 17px; font-weight: 600;
++  margin: 34px 0 14px;
++}
++
++.goal-notice {
++  background: var(--accent-soft); color: var(--ink);
++  border: 1px solid var(--border); border-radius: var(--radius-md);
++  padding: 14px 16px; font-size: 13.5px; margin-bottom: 18px;
++}
++.goal-notice[hidden], .goal-empty[hidden], .goal-grid[hidden], #goal-completed-wrap[hidden] { display: none; }
++.goal-empty { background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius-lg); }
++.goal-empty .btn { margin-top: 16px; }
++
++.goal-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
++  gap: 18px;
++}
++.goal-add-tile { min-height: 200px; }
++
++.goal-card {
++  background: var(--surface);
++  border: 1px solid var(--border);
++  border-radius: var(--radius-lg);
++  padding: 22px;
++  box-shadow: var(--shadow-sm);
++  display: flex; flex-direction: column; gap: 14px;
++  min-width: 0;
++}
++.goal-card.is-completed { background: var(--surface-sunk); box-shadow: none; }
++
++.goal-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
++.goal-card__title { min-width: 0; }
++.goal-card__name { font-size: 19px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
++.goal-card__desc { font-size: 13px; color: var(--ink-soft); margin-top: 4px; overflow-wrap: anywhere; }
++
++.goal-card__figures { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
++.goal-card__amounts { font-size: 14px; color: var(--ink-soft); padding-bottom: 4px; }
++.goal-card__amounts strong { font-size: 18px; font-weight: 700; color: var(--ink); }
++.goal-card__pct {
++  font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1;
++  letter-spacing: -0.02em; color: var(--primary);
++}
++
++.goal-bar { height: 10px; border-radius: var(--radius-full); background: var(--surface-sunk); overflow: hidden; }
++.goal-card.is-completed .goal-bar { background: var(--primary-soft); }
++.goal-bar span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width 0.5s ease; }
++
++.goal-card__meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-soft); }
++.goal-card__due.is-late { color: var(--danger); font-weight: 600; }
++
++.goal-card__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
++
++.badge-goal-done { background: var(--primary-soft); color: var(--primary-dark); white-space: nowrap; }
++.badge-goal-reached { background: var(--accent-soft); color: var(--primary-dark); white-space: nowrap; }
++
++.goal-modal-hint { font-size: 13px; color: var(--ink-soft); }
++.goal-history { max-height: 340px; overflow-y: auto; }
++
++@media (max-width: 1080px) {
++  .stat-grid--4 { grid-template-columns: repeat(2, 1fr); }
++}
++@media (max-width: 780px) {
++  .stat-grid--4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
++  .goal-grid { grid-template-columns: 1fr; gap: 14px; }
++  .goal-card { padding: 18px; }
++  .goal-card__pct { font-size: 30px; }
++  .mobile-nav button { padding: 4px 6px; }
++}
+diff --git a/supabase-goals.sql b/supabase-goals.sql
+new file mode 100644
+index 0000000..498dc0b
+--- /dev/null
++++ b/supabase-goals.sql
+@@ -0,0 +1,97 @@
++-- =========================================================
++-- Ipon — Savings Goals
++-- Run this once in the Supabase SQL editor, AFTER supabase.sql.
++-- Safe to re-run: every statement is idempotent.
++--
++-- Goals are an allocation layer on top of your platform
++-- balances: adding money to a goal does NOT change any
++-- platform balance or create a transaction.
++-- =========================================================
++
++-- ---------------------------------------------------------
++-- Tables
++-- ---------------------------------------------------------
++create table if not exists public.goals (
++  id             uuid primary key default uuid_generate_v4(),
++  user_id        uuid not null references auth.users(id) on delete cascade,
++  name           text not null check (char_length(btrim(name)) > 0),
++  description    text,
++  target_amount  numeric(12,2) not null check (target_amount > 0),
++  target_date    date,
++  status         text not null default 'active' check (status in ('active', 'completed')),
++  completed_at   timestamptz,
++  created_at     timestamptz not null default now()
++);
++
++create table if not exists public.goal_contributions (
++  id          uuid primary key default uuid_generate_v4(),
++  user_id     uuid not null references auth.users(id) on delete cascade,
++  goal_id     uuid not null references public.goals(id) on delete cascade,
++  amount      numeric(12,2) not null check (amount > 0),
++  date        date not null default current_date,
++  note        text,
++  created_at  timestamptz not null default now()
++);
++
++create index if not exists idx_goals_user                    on public.goals(user_id);
++create index if not exists idx_goal_contributions_user       on public.goal_contributions(user_id);
++create index if not exists idx_goal_contributions_goal       on public.goal_contributions(goal_id);
++
++-- ---------------------------------------------------------
++-- View: each goal with the total contributed so far.
++-- security_invoker makes it respect the RLS policies below.
++-- ---------------------------------------------------------
++create or replace view public.goal_progress
++with (security_invoker = true) as
++select
++  g.id            as goal_id,
++  g.user_id,
++  g.name,
++  g.description,
++  g.target_amount,
++  g.target_date,
++  g.status,
++  g.completed_at,
++  g.created_at,
++  coalesce(sum(c.amount), 0) as saved
++from public.goals g
++left join public.goal_contributions c on c.goal_id = g.id
++group by g.id;
++
++-- ---------------------------------------------------------
++-- Row Level Security — every row is scoped to its owner
++-- ---------------------------------------------------------
++alter table public.goals              enable row level security;
++alter table public.goal_contributions enable row level security;
++
++drop policy if exists "goals_select_own" on public.goals;
++drop policy if exists "goals_insert_own" on public.goals;
++drop policy if exists "goals_update_own" on public.goals;
++drop policy if exists "goals_delete_own" on public.goals;
++
++create policy "goals_select_own" on public.goals
++  for select using (auth.uid() = user_id);
++create policy "goals_insert_own" on public.goals
++  for insert with check (auth.uid() = user_id);
++create policy "goals_update_own" on public.goals
++  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
++create policy "goals_delete_own" on public.goals
++  for delete using (auth.uid() = user_id);
++
++drop policy if exists "goal_contributions_select_own" on public.goal_contributions;
++drop policy if exists "goal_contributions_insert_own" on public.goal_contributions;
++drop policy if exists "goal_contributions_update_own" on public.goal_contributions;
++drop policy if exists "goal_contributions_delete_own" on public.goal_contributions;
++
++create policy "goal_contributions_select_own" on public.goal_contributions
++  for select using (auth.uid() = user_id);
++-- A contribution must belong to the user AND point at one of the user's own goals.
++create policy "goal_contributions_insert_own" on public.goal_contributions
++  for insert with check (
++    auth.uid() = user_id
++    and exists (select 1 from public.goals g where g.id = goal_id and g.user_id = auth.uid())
++  );
++create policy "goal_contributions_update_own" on public.goal_contributions
++  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
++create policy "goal_contributions_delete_own" on public.goal_contributions
++  for delete using (auth.uid() = user_id);
+-- 
+2.43.0
+

@@ -84,6 +84,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
         Platforms
       </button>
+      <button class="nav__item" data-view="goals">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+        Goals
+      </button>
       <button class="nav__item" data-view="transactions">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         Transactions
@@ -202,6 +206,75 @@
       <div class="platform-grid" id="platform-grid"></div>
     </section>
 
+    <!-- ===================== Goals ===================== -->
+    <section class="view" id="view-goals">
+      <div class="page-head">
+        <div><h2>My Savings Goals</h2><p>Every peso brings you closer.</p></div>
+        <button class="btn btn-primary" id="add-goal-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          New goal
+        </button>
+      </div>
+
+      <div class="stat-grid stat-grid--4">
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">Total target</span>
+            <div class="stat-card__icon tone-ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></div>
+          </div>
+          <div class="stat-card__value num" id="goal-stat-target">₱0</div>
+          <div class="stat-card__sub" id="goal-stat-target-sub">Across all goals</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">Total saved</span>
+            <div class="stat-card__icon tone-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
+          <div class="stat-card__value num" id="goal-stat-saved">₱0</div>
+          <div class="stat-card__sub" id="goal-stat-saved-sub">Set aside for goals</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">Active goals</span>
+            <div class="stat-card__icon tone-accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+          </div>
+          <div class="stat-card__value num" id="goal-stat-active">0</div>
+          <div class="stat-card__sub">Still in progress</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__label">Completed goals</span>
+            <div class="stat-card__icon tone-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </div>
+          </div>
+          <div class="stat-card__value num" id="goal-stat-done">0</div>
+          <div class="stat-card__sub">Targets reached</div>
+        </div>
+      </div>
+
+      <div class="goal-notice" id="goal-setup-note" hidden>
+        Goals need two new database tables. Run <strong>supabase-goals.sql</strong> in your Supabase SQL editor, then refresh this page.
+      </div>
+
+      <div class="empty-state goal-empty" id="goal-empty" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+        <p>No goals yet. Name something you're saving for, like a new phone, a trip, or an emergency fund.</p>
+        <button class="btn btn-primary" id="goal-empty-add" type="button">Create your first goal</button>
+      </div>
+
+      <div class="goal-grid" id="goal-grid"></div>
+
+      <div id="goal-completed-wrap" hidden>
+        <h3 class="goal-section-title">Completed</h3>
+        <div class="goal-grid" id="goal-completed-grid"></div>
+      </div>
+    </section>
+
     <!-- ===================== Transactions ===================== -->
     <section class="view" id="view-transactions">
       <div class="page-head">
@@ -244,6 +317,10 @@
     <button data-view="platforms">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
       Platforms
+    </button>
+    <button data-view="goals">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+      Goals
     </button>
     <button data-view="transactions">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
@@ -337,6 +414,90 @@
         <button type="submit" class="btn btn-primary" id="tx-submit">Save transaction</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Add/Edit Goal                                           -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-goal">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="goal-modal-title">New goal</h3>
+      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <form class="modal__body" id="goal-form">
+      <input type="hidden" id="goal-id">
+      <div class="field">
+        <label for="goal-name">Goal name</label>
+        <input class="input" id="goal-name" placeholder="e.g. New phone" maxlength="80" required>
+      </div>
+      <div class="field">
+        <label for="goal-target">Target amount (₱)</label>
+        <input class="input" id="goal-target" type="number" min="0.01" step="0.01" placeholder="25000" required>
+      </div>
+      <div class="field">
+        <label for="goal-date">Target date (optional)</label>
+        <input class="input" id="goal-date" type="date">
+      </div>
+      <div class="field">
+        <label for="goal-desc">Description (optional)</label>
+        <textarea class="input" id="goal-desc" rows="2" maxlength="300" placeholder="What is this for?"></textarea>
+      </div>
+      <p class="field-error" id="goal-error"></p>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="goal-submit">Save goal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Add money to a goal                                     -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-contribution">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="contribution-modal-title">Add money</h3>
+      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <form class="modal__body" id="contribution-form">
+      <input type="hidden" id="contribution-goal-id">
+      <p class="goal-modal-hint" id="contribution-hint"></p>
+      <div class="field">
+        <label for="contribution-amount">Amount (₱)</label>
+        <input class="input" id="contribution-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+      </div>
+      <div class="field">
+        <label for="contribution-date">Date</label>
+        <input class="input" id="contribution-date" type="date" required>
+      </div>
+      <div class="field">
+        <label for="contribution-note">Note (optional)</label>
+        <input class="input" id="contribution-note" placeholder="e.g. Bonus">
+      </div>
+      <p class="field-error" id="contribution-error"></p>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="contribution-submit">Add money</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Modal: Goal contribution history                               -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-goal-history">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="goal-history-title">Contributions</h3>
+      <button class="modal__close" data-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal__body">
+      <div class="tx-list goal-history" id="goal-history-list"></div>
+    </div>
   </div>
 </div>
 
