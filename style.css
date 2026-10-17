@@ -614,7 +614,25 @@ footer span {
 /* =========================================================
    Savings goals
    ========================================================= */
-.stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.stat-grid--2 { grid-template-columns: repeat(2, 1fr); }
+
+.goal-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 26px;
+  align-items: stretch;
+}
+.goal-overview-grid > .stat-grid,
+.goal-overview-grid > .panel-grid { display: contents; }
+.goal-overview-grid .stat-grid,
+.goal-overview-grid .panel-grid { margin: 0; }
+.goal-overview-grid .stat-card,
+.goal-overview-grid .panel { min-width: 0; padding: 16px; }
+.goal-overview-grid .panel__head { margin-bottom: 10px; }
+.goal-overview-grid .panel__head h3 { white-space: nowrap; }
+.goal-overview-grid .panel__head p { display: none; }
+.goal-overview-grid .chart-wrap { height: 180px; }
 
 .goal-section-title {
   font-size: 17px; font-weight: 600;
@@ -677,10 +695,10 @@ footer span {
 .goal-history { max-height: 340px; overflow-y: auto; }
 
 @media (max-width: 1080px) {
-  .stat-grid--4 { grid-template-columns: repeat(2, 1fr); }
+  .goal-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 780px) {
-  .stat-grid--4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .goal-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .goal-grid { grid-template-columns: 1fr; gap: 14px; }
   .goal-card { padding: 18px; }
   .goal-card__pct { font-size: 30px; }

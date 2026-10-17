@@ -860,8 +860,6 @@ function renderGoals() {
   $('#goal-stat-saved-sub').textContent = totalTarget > 0
     ? `${Math.min(100, Math.floor((totalSaved / totalTarget) * 100))}% of your total target`
     : 'Set aside for goals';
-  $('#goal-stat-active').textContent = active.length;
-  $('#goal-stat-done').textContent = completed.length;
 
   // Setup notice (tables missing)
   $('#goal-setup-note').hidden = state.goalsReady;
@@ -881,8 +879,9 @@ function renderGoals() {
       <span>New goal</span>
     </button>`;
 
-  $('#goal-completed-wrap').hidden = completed.length === 0;
+  $('#goal-completed-wrap').hidden = goals.length === 0;
   $('#goal-completed-grid').innerHTML = completed.map(goalCardHtml).join('');
+  $('#goal-completed-grid').hidden = completed.length === 0;
   applyGoalSearch();
   renderGoalCharts();
 }
@@ -896,7 +895,7 @@ function applyGoalSearch() {
   const completedVisible = filterCards(
     query, $$('.goal-card', $('#goal-completed-grid')), searchableContent, $('#goal-search-empty')
   );
-  $('#goal-completed-wrap').hidden = completedVisible === 0;
+  $('#goal-completed-grid').hidden = completedVisible === 0;
   $('#goal-search-empty').hidden = !query.trim() || activeVisible + completedVisible > 0;
 }
 
@@ -993,6 +992,7 @@ function renderGoalCharts() {
       <span class="legend__val num">${((g.saved / totalSaved) * 100).toFixed(1)}%</span>`;
     legend.appendChild(row);
   });
+
 }
 
 // One delegated listener covers both grids and the dynamic add tile.

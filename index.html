@@ -192,64 +192,46 @@
         </button>
       </div>
 
-      <div class="stat-grid stat-grid--4">
-        <div class="stat-card">
-          <div class="stat-card__top">
-            <span class="stat-card__label">Total target</span>
-            <div class="stat-card__icon tone-ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></div>
-          </div>
-          <div class="stat-card__value num" id="goal-stat-target">₱0</div>
-          <div class="stat-card__sub" id="goal-stat-target-sub">Across all goals</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card__top">
-            <span class="stat-card__label">Total saved</span>
-            <div class="stat-card__icon tone-primary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      <div class="goal-overview-grid">
+        <div class="stat-grid stat-grid--2">
+          <div class="stat-card">
+            <div class="stat-card__top">
+              <span class="stat-card__label">Total target</span>
+              <div class="stat-card__icon tone-ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></div>
             </div>
+            <div class="stat-card__value num" id="goal-stat-target">₱0</div>
+            <div class="stat-card__sub" id="goal-stat-target-sub">Across all goals</div>
           </div>
-          <div class="stat-card__value num" id="goal-stat-saved">₱0</div>
-          <div class="stat-card__sub" id="goal-stat-saved-sub">Set aside for goals</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card__top">
-            <span class="stat-card__label">Active goals</span>
-            <div class="stat-card__icon tone-accent">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          <div class="stat-card">
+            <div class="stat-card__top">
+              <span class="stat-card__label">Total saved</span>
+              <div class="stat-card__icon tone-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </div>
             </div>
+            <div class="stat-card__value num" id="goal-stat-saved">₱0</div>
+            <div class="stat-card__sub" id="goal-stat-saved-sub">Set aside for goals</div>
           </div>
-          <div class="stat-card__value num" id="goal-stat-active">0</div>
-          <div class="stat-card__sub">Still in progress</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-card__top">
-            <span class="stat-card__label">Completed goals</span>
-            <div class="stat-card__icon tone-primary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            </div>
-          </div>
-          <div class="stat-card__value num" id="goal-stat-done">0</div>
-          <div class="stat-card__sub">Targets reached</div>
-        </div>
-      </div>
 
-      <div class="panel-grid" id="goal-charts" hidden>
-        <div class="panel">
-          <div class="panel__head">
-            <div><h3>Goal progress</h3><p>Saved vs target for each goal</p></div>
+        <div class="panel-grid" id="goal-charts" hidden>
+          <div class="panel">
+            <div class="panel__head">
+              <div><h3>Goal progress</h3><p>Saved vs target for each goal</p></div>
+            </div>
+            <div class="chart-wrap" id="goal-bar-wrap" data-empty="Add money to a goal to see its progress">
+              <canvas id="goal-bar-chart"></canvas>
+            </div>
           </div>
-          <div class="chart-wrap" id="goal-bar-wrap" data-empty="Add money to a goal to see its progress">
-            <canvas id="goal-bar-chart"></canvas>
+          <div class="panel">
+            <div class="panel__head">
+              <div><h3>Savings by goal</h3><p>Where your goal savings are going</p></div>
+            </div>
+            <div class="chart-wrap" id="goal-dist-wrap" data-empty="Add money to a goal to see the breakdown" style="height:150px;">
+              <canvas id="goal-dist-chart"></canvas>
+            </div>
+            <div class="legend" id="goal-dist-legend"></div>
           </div>
-        </div>
-        <div class="panel">
-          <div class="panel__head">
-            <div><h3>Savings by goal</h3><p>Where your goal savings are going</p></div>
-          </div>
-          <div class="chart-wrap" id="goal-dist-wrap" data-empty="Add money to a goal to see the breakdown" style="height:150px;">
-            <canvas id="goal-dist-chart"></canvas>
-          </div>
-          <div class="legend" id="goal-dist-legend"></div>
         </div>
       </div>
 
