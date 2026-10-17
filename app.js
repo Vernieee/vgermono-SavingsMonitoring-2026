@@ -97,6 +97,15 @@ function hideAuthMsg() {
   $('#auth-msg').className = 'auth-msg';
 }
 
+$('#password-toggle').addEventListener('click', (e) => {
+  const button = e.currentTarget;
+  const password = $('#auth-password');
+  const showPassword = password.type === 'password';
+  password.type = showPassword ? 'text' : 'password';
+  button.textContent = showPassword ? 'Hide' : 'Show';
+  button.setAttribute('aria-pressed', String(showPassword));
+});
+
 $('#auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   hideAuthMsg();

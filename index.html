@@ -39,7 +39,10 @@
       </div>
       <div class="field">
         <label for="auth-password">Password</label>
-        <input class="input" type="password" id="auth-password" required autocomplete="current-password" minlength="6" placeholder="••••••••">
+        <div class="password-field">
+          <input class="input" type="password" id="auth-password" required autocomplete="current-password" minlength="6" placeholder="••••••••">
+          <button class="password-toggle" type="button" id="password-toggle" aria-controls="auth-password" aria-pressed="false">Show</button>
+        </div>
       </div>
       <button type="submit" class="btn btn-primary btn-block" id="auth-submit">
         <span id="auth-submit-label">Log in</span>
