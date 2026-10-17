@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Ipon · Personal Savings Tracker</title>
+<title>IPON · Personal Savings Tracker</title>
 <meta name="description" content="Track deposits, withdrawals, and goals across every bank and e-wallet you save in.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 
@@ -27,7 +27,7 @@
   <div class="auth-card">
     <div class="brand">
       <div class="brand__mark">I</div>
-      <div class="brand__text"><h1>Ipon</h1><span>Personal savings tracker</span></div>
+      <div class="brand__text"><h1>IPON</h1><span>Personal savings tracker</span></div>
     </div>
     <h2 id="auth-title">Welcome back</h2>
     <p class="lead" id="auth-lead">Log in to see how your savings are growing.</p>
@@ -46,7 +46,7 @@
       </button>
     </form>
     <div class="auth-switch">
-      <span id="auth-switch-text">New to Ipon?</span>
+      <span id="auth-switch-text">New to IPON?</span>
       <button type="button" id="auth-switch-btn">Create an account</button>
     </div>
   </div>
@@ -59,7 +59,7 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="brand__mark">I</div>
-      <div class="brand__text"><h1>Ipon</h1><span>Personal savings tracker</span></div>
+      <div class="brand__text"><h1>IPON</h1><span>Personal savings tracker</span></div>
     </div>
 
     <nav class="nav">
@@ -89,6 +89,16 @@
       </button>
     </div>
   </aside>
+
+  <div class="mobile-header" aria-label="Mobile header">
+    <div class="brand brand--mobile">
+      <div class="brand__mark">I</div>
+      <div class="brand__text"><h1>IPON</h1><span>Personal savings tracker</span></div>
+    </div>
+    <button class="icon-btn" id="mobile-logout-btn" title="Log out" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+    </button>
+  </div>
 
   <main class="main">
 
@@ -228,29 +238,28 @@
       </div>
       <div class="goal-grid" id="goal-grid"></div>
     </section>
-
   </main>
-</div>
 
-<!-- Mobile bottom nav -->
-<nav class="mobile-nav" id="mobile-nav">
-  <button data-view="dashboard" class="is-active">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
-    Home
-  </button>
-  <button data-view="platforms">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
-    Platforms
-  </button>
-  <button data-view="transactions">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-    History
-  </button>
-  <button data-view="goals">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
-    Goals
-  </button>
-</nav>
+  <!-- Mobile bottom nav -->
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
+    <button data-view="dashboard" class="is-active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
+      Home
+    </button>
+    <button data-view="platforms">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+      Platforms
+    </button>
+    <button data-view="transactions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      History
+    </button>
+    <button data-view="goals">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+      Goals
+    </button>
+  </nav>
+</div>
 
 <!-- ============================================================ -->
 <!-- Modal: Add/Edit Platform                                       -->

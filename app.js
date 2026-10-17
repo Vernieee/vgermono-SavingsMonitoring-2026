@@ -124,9 +124,12 @@ $('#auth-form').addEventListener('submit', async (e) => {
   }
 });
 
-$('#logout-btn').addEventListener('click', async () => {
+async function handleLogout() {
   await sb.auth.signOut();
-});
+}
+
+$('#logout-btn').addEventListener('click', handleLogout);
+$('#mobile-logout-btn')?.addEventListener('click', handleLogout);
 
 sb.auth.onAuthStateChange((_event, session) => {
   if (session?.user) {
